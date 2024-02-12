@@ -1,5 +1,5 @@
 local skynet = require "skynet"
-local redis = require "redis"
+local redis = require "skynet.db.redis"
 
 local config = require "config.database"
 local account = require "db.account"
