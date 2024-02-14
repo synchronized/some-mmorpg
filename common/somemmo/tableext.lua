@@ -7,9 +7,12 @@ local pairs = pairs
 local tostring = tostring
 local next = next
 
-local function print_r(root)
+local function tabledump(root, _space, _name)
 	local cache = {  [root] = "." }
-	local function _dump(t,space,name)
+	local function _dump(t, space, name)
+		if not t then
+			return "nil"
+		end
 		local temp = {}
 		for k,v in pairs(t) do
 			local key = tostring(k)
@@ -25,7 +28,14 @@ local function print_r(root)
 		end
 		return tconcat(temp,"\n"..space)
 	end
-	print(_dump(root, "",""))
+	return _dump(root, _space or "", _name or "")
 end
 
-return print_r
+local function tableprint(root)
+	print(tabledump(root, "",""))
+end
+
+return {
+	tabledump = tabledump,
+	tableprint = tableprint,
+}

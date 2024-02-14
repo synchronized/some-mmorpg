@@ -2,6 +2,21 @@ local skynet = require "skynet"
 
 local protoloader = require "protoloader"
 
+protoloader.init ()
+
+local protod = {}
+
+function protod.loadindex(name)
+	return protoloader.getindexbyname(name)
+end
+
 skynet.start (function ()
-	protoloader.init ()
+	skynet.dispatch("lua", function (_, _, cmd, ...)
+		local f = protod[cmd]
+		if not f then
+			error(string.format("Unknown command %s", tostring(cmd)))
+		end
+
+		skynet.retpack(f(...))
+	end)
 end)

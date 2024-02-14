@@ -1,5 +1,5 @@
 local skynet = require "skynet"
-local socket = require "socket"
+local socket = require "skynet.socket"
 
 local syslog = require "syslog"
 local config = require "config.system"
@@ -36,23 +36,23 @@ function CMD.open (conf)
 	end)
 end
 
-function CMD.save_session (account, key, challenge)
-	session = session_id
+function CMD.save_session (account_id, session_key, challenge)
+	local login_session = session_id
 	session_id = session_id + 1
 
-	s = slave[(session % nslave) + 1]
-	skynet.call (s, "lua", "save_session", session, account, key, challenge)
-	return session
+	s = slave[(login_session % nslave) + 1]
+	skynet.call (s, "lua", "save_session", login_session, account_id, session_key, challenge)
+	return login_session
 end
 
-function CMD.challenge (session, challenge)
-	s = slave[(session % nslave) + 1]
-	return skynet.call (s, "lua", "challenge", session, challenge)
+function CMD.challenge (login_session, challenge)
+	s = slave[(login_session % nslave) + 1]
+	return skynet.call (s, "lua", "challenge", login_session, challenge)
 end
 
-function CMD.verify (session, token)
-	local s = slave[(session % nslave) + 1]
-	return skynet.call (s, "lua", "verify", session, token)
+function CMD.verify (login_session, token)
+	local s = slave[(login_session % nslave) + 1]
+	return skynet.call (s, "lua", "verify", login_session, token)
 end
 
 skynet.start (function ()

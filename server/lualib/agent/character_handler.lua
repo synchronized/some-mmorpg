@@ -1,11 +1,11 @@
 local skynet = require "skynet"
-local sharedata = require "sharedata"
+local sharedata = require "skynet.sharedata"
 
 local syslog = require "syslog"
 local dbpacker = require "db.packer"
+local cjsonutil = require "cjson.util"
 local handler = require "agent.handler"
 local uuid = require "uuid"
-
 
 local REQUEST = {}
 handler = handler.new (REQUEST)
@@ -20,46 +20,46 @@ handler:init (function (u)
 	gdd = sharedata.query "gdd"
 end)
 
-local function load_list (account)
-	local list = skynet.call (database, "lua", "character", "list", account)
-	if list then
-		list = dbpacker.unpack (list)
+local function load_list (account_id)
+	local char_list = skynet.call (database, "lua", "character", "list", account_id)
+	if char_list then
+		char_list = dbpacker.unpack (char_list)
 	else
-		list = {}
+		char_list = {}
 	end
-	return list
+	return char_list
 end
 
-local function check_character (account, id)
-	print ("check_character", account, id)
-	local list = load_list (account)
-	for _, v in pairs (list) do
-		print ("list", v)
-		if v == id then return true end
+local function check_character (account_id, character_id)
+	local char_list = load_list (account_id)
+	for _, v in pairs (char_list) do
+		if tostring(v) == tostring(character_id) then return true end
 	end
 	return false
 end
 
 function REQUEST.character_list ()
-	local list = load_list (user.account)
+	local char_list = load_list (user.account_id)
+	skynet.error("<character_list> account_id: "..tostring(user.account_id)..", char_list: "..cjsonutil.serialise_value(char_list))
 	local character = {}
-	for _, id in pairs (list) do
-		local c = skynet.call (database, "lua", "character", "load", id)
+	for _, character_id in pairs (char_list) do
+		local c = skynet.call (database, "lua", "character", "load", character_id)
 		if c then
-			character[id] = dbpacker.unpack (c)
+			character[character_id] = dbpacker.unpack (c)
 		end
 	end
+
+	skynet.error("    character-list: "..cjsonutil.serialise_value(character))
 	return { character = character }
 end
 
 local function create (name, race, class)
-	assert (name and race and class)
-	assert (#name > 2 and #name < 24)
-	assert (gdd.class[class])
+	assert (name and race and class, "invalid name or race, class")
+	assert (#name > 2 and #name < 24, string.format("invalid name: %s", name))
+	assert (gdd.class[class], string.format("invalid class: %s", class))
+	local r = assert(gdd.race[race], string.format("invalid race: %s", race))
 
-	local r = gdd.race[race] or error ()
-
-	local character = { 
+	local character = {
 		general = {
 			name = name,
 			race = race,
@@ -67,7 +67,7 @@ local function create (name, race, class)
 			map = r.home,
 		}, 
 		attribute = {
-			level = 1,
+			level = math.tointeger(1),
 			exp = 0,
 		},
 		movement = {
@@ -79,46 +79,55 @@ local function create (name, race, class)
 end
 
 function REQUEST.character_create (args)
-	for k, v in pairs (args) do print (k, v) end
-	local c = args.character or error ("invalid argument")
+	assert(args, "invalid request")
+	local char_req = assert(args.character, "invalid request character")
 
-	local character = create (c.name, c.race, c.class)
-	local id = skynet.call (database, "lua", "character", "reserve", uuid.gen (), c.name)
-	if not id then return {} end
+	skynet.error("<character_create> args: "..cjsonutil.serialise_value(char_req, "  "))
 
-	character.id = id
+	local character = create(char_req.name, char_req.race, char_req.class)
+	local character_id = skynet.call(database, "lua", "character", "reserve", tostring(uuid.gen()), char_req.name)
+	if not character_id then
+		skynet.error(string.format("    character_name: %s already exist", character.z.name))
+		return {}
+	end
+
+	character.id = character_id
 	local json = dbpacker.pack (character)
-	skynet.call (database, "lua", "character", "save", id, json)
+	if not skynet.call(database, "lua", "character", "save", character_id, json) then
+		skynet.error(string.format("    character_id: %d save failed data: %s", character_id, json))	
+	end
 
-	local list = load_list (user.account)
-	table.insert (list, id)
+	local list = load_list (user.account_id)
+	table.insert (list, character_id)
 	json = dbpacker.pack (list)
-	skynet.call (database, "lua", "character", "savelist", user.account, json)
+	
+	if not skynet.call(database, "lua", "character", "savelist", user.account_id, json) then
+		skynet.error(string.format("    account_id: %d save failed char_list: %s", user.account_id, json))
+	end
 
+	skynet.error("    new character_info: "..cjsonutil.serialise_value(character, "      "))
 	return { character = character }
 end
 
 function REQUEST.character_pick (args)
-	local id = args.id or error ()
-	assert (check_character (user.account, id))
+	assert(args, "invalid request")
+	local character_id = assert(args.id, string.format("invalid request character_id"))
+	assert(check_character (user.account_id, character_id), string.format("invalidid character_id: %d", character_id))
 
-	local c = skynet.call (database, "lua", "character", "load", id) or error ()
+	skynet.error("<character_pick> args: "..cjsonutil.serialise_value(args, "  "))
+
+	local c = assert(skynet.call(database, "lua", "character", "load", character_id), 
+		string.format("character_id: %d load failed", character_id))
 	local character = dbpacker.unpack (c)
 	user.character = character
 
 	local world = skynet.uniqueservice ("world")
-	skynet.call (world, "lua", "character_enter", id)
+	skynet.call (world, "lua", "character_enter", character_id)
 
 	return { character = character }
 end
 
-attribute_string = {
-	"health",
-	"strength",
-	"stamina",
-}
-
-function handler.init (character)
+function handler.on_enter_world (character)
 	local temp_attribute = {
 		[1] = {},
 		[2] = {},
@@ -132,10 +141,11 @@ function handler.init (character)
 
 	local class = character.general.class
 	local race = character.general.race
-	local level = character.attribute.level
+	local level = math.tointeger(character.attribute.level)
 
+	
 	local gda = gdd.attribute
-
+	
 	local base = temp_attribute[1]
 	base.health_max = gda.health_max[class][level]
 	base.strength = gda.strength[race][level]

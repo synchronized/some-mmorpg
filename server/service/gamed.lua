@@ -44,15 +44,15 @@ function gamed.command_handler (cmd, ...)
 	return f (...)
 end
 
-function gamed.auth_handler (session, token)
-	return skynet.call (logind, "lua", "verify", session, token)	
+function gamed.auth_handler (login_session, token)
+	return skynet.call (logind, "lua", "verify", login_session, token)
 end
 
-function gamed.login_handler (fd, account)
-	local agent = online_account[account]
+function gamed.login_handler (fd, account_id)
+	local agent = online_account[account_id]
 	if agent then
-		syslog.warningf ("multiple login detected for account %d", account)
-		skynet.call (agent, "lua", "kick", account)
+		syslog.warningf ("multiple login detected for account_id %d", account_id)
+		skynet.call (agent, "lua", "kick", account_id)
 	end
 
 	if #pool == 0 then
@@ -62,9 +62,9 @@ function gamed.login_handler (fd, account)
 		agent = table.remove (pool, 1)
 		syslog.debugf ("agent(%d) assigned, %d remain in pool", agent, #pool)
 	end
-	online_account[account] = agent
+	online_account[account_id] = agent
 
-	skynet.call (agent, "lua", "open", fd, account)
+	skynet.call (agent, "lua", "open", fd, account_id)
 	gameserver.forward (fd, agent)
 	return agent
 end

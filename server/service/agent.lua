@@ -1,7 +1,7 @@
 local skynet = require "skynet"
 local queue = require "skynet.queue"
-local sharemap = require "sharemap"
-local socket = require "socket"
+local sharemap = require "skynet.sharemap"
+local socket = require "skynet.socket"
 
 local syslog = require "syslog"
 local protoloader = require "protoloader"
@@ -13,9 +13,9 @@ local combat_handler = require "agent.combat_handler"
 
 
 local gamed = tonumber (...)
-local database
 
-local host, proto_request = protoloader.load (protoloader.GAME)
+local host
+local proto_request
 
 --[[
 .user {
@@ -36,13 +36,13 @@ local function send_msg (fd, msg)
 end
 
 local user_fd
-local session = {}
-local session_id = 0
+local client_session_map = {}
+local client_session_id = 0
 local function send_request (name, args)
-	session_id = session_id + 1
-	local str = proto_request (name, args, session_id)
+	client_session_id = client_session_id + 1
+	local str = proto_request (name, args, client_session_id)
 	send_msg (user_fd, str)
-	session[session_id] = { name = name, args = args }
+	client_session_map[client_session_id] = { name = name, args = args }
 end
 
 local function kick_self ()
@@ -86,23 +86,23 @@ end
 
 local RESPONSE
 local function handle_response (id, args)
-	local s = session[id]
+	local s = client_session_map[id]
 	if not s then
-		syslog.warningf ("session %d not found", id)
+		syslog.warningf ("client_session_id: %d not found", id)
 		kick_self ()
 		return
 	end
 
 	local f = RESPONSE[s.name]
 	if not f then
-		syslog.warningf ("unhandled response : %s", s.name)
+		syslog.warningf ("client_session_id: %d unhandled response: %s", id, s.name)
 		kick_self ()
 		return
 	end
 
 	local ok, ret = xpcall (f, traceback, s.args, args)
 	if not ok then
-		syslog.warningf ("handle response(%d-%s) failed : %s", id, s.name, ret) 
+		syslog.warningf ("client_session_id: %d handle response(%s) failed: %s", id, s.name, ret) 
 		kick_self ()
 	end
 end
@@ -122,18 +122,18 @@ skynet.register_protocol {
 			syslog.warningf ("invalid message type : %s", type) 
 			kick_self ()
 		end
+		skynet.ret();
 	end,
 }
 
 local CMD = {}
 
-function CMD.open (fd, account)
-	local name = string.format ("agent:%d", account)
-	syslog.debug ("agent opened")
+function CMD.open (fd, account_id)
+	skynet.error(string.format ("agent account_id: %d has created", account_id))
 
 	user = { 
 		fd = fd, 
-		account = account,
+		account_id = account_id,
 		REQUEST = {},
 		RESPONSE = {},
 		CMD = CMD,
@@ -143,7 +143,7 @@ function CMD.open (fd, account)
 	REQUEST = user.REQUEST
 	RESPONSE = user.RESPONSE
 	
-	character_handler:register (user)
+	character_handler:register(user)
 
 	last_heartbeat_time = skynet.now ()
 	heartbeat_check ()
@@ -152,9 +152,9 @@ end
 function CMD.close ()
 	syslog.debug ("agent closed")
 	
-	local account
+	local account_id
 	if user then
-		account = user.account
+		account_id = user.account_id
 
 		if user.map then
 			skynet.call (user.map, "lua", "character_leave")
@@ -177,7 +177,7 @@ function CMD.close ()
 		REQUEST = nil
 	end
 
-	skynet.call (gamed, "lua", "close", skynet.self (), account)
+	skynet.call (gamed, "lua", "close", skynet.self (), account_id)
 end
 
 function CMD.kick ()
@@ -187,12 +187,12 @@ function CMD.kick ()
 end
 
 function CMD.world_enter (world)
-	local name = string.format ("agent:%d:%s", user.character.id, user.character.general.name)
+	skynet.error(string.format("agent character: %d(%s) world enter", user.character.id, user.character.general.name))
 
-	character_handler.init (user.character)
+	character_handler.on_enter_world(user.character)
 
 	user.world = world
-	character_handler:unregister (user)
+	character_handler:unregister(user)
 
 	return user.character.general.map, user.character.movement.pos
 end
@@ -207,16 +207,21 @@ function CMD.map_enter (map)
 end
 
 skynet.start (function ()
-	skynet.dispatch ("lua", function (_, _, command, ...)
+	local protod = skynet.uniqueservice ("protod")
+	local protoindex = skynet.call(protod, "lua", "loadindex", protoloader.GAME)
+	host, proto_request = protoloader.loadbyserver (protoindex)
+	
+	skynet.dispatch ("lua", function (session, source, command, ...)
+		skynet.error(string.format("agent receive lua message session: %d, source: %d, command:%s", session, source, command))
 		local f = CMD[command]
 		if not f then
-			syslog.warningf ("unhandled message(%s)", command) 
+			syslog.warningf ("    unhandled message(%s)", command) 
 			return skynet.ret ()
 		end
 
 		local ok, ret = xpcall (f, traceback, ...)
 		if not ok then
-			syslog.warningf ("handle message(%s) failed : %s", command, ret) 
+			syslog.warningf ("    handle message(%s) failed : %s", command, ret) 
 			kick_self ()
 			return skynet.ret ()
 		end

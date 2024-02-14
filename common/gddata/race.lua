@@ -1,5 +1,6 @@
 local race = {
-	["human"] = { 
+	-- 种族-人类
+	["human"] = {
 		name = "human",
 		home = "Stormwind City",
 		pos_x = 100,
@@ -7,6 +8,7 @@ local race = {
 		pos_z = 100,
 		pos_o = 180,
 	},
+	-- 种族-魔族
 	["orc"] = {
 		name = "orc",
 		home = "Orgrimmar",

@@ -1,12 +1,22 @@
 local skynet = require "skynet"
+local driver = require "skynet.socketdriver"
 
 local gateserver = require "gameserver.gateserver"
 local syslog = require "syslog"
 local protoloader = require "protoloader"
 
 
+
 local gameserver = {}
 local pending_msg = {}
+local login_token = {}
+
+local host
+
+local function send_msg (fd, msg)
+	local package = string.pack (">s2", msg)
+	driver.send (fd, package)
+end
 
 function gameserver.forward (fd, agent)
 	gateserver.forward (fd, agent)
@@ -19,9 +29,12 @@ end
 function gameserver.start (gamed)
 	local handler = {}
 
-	local host, send_request = protoloader.load (protoloader.LOGIN)
-
 	function handler.open (source, conf)
+
+		local protod = skynet.uniqueservice ("protod")
+		local protoindex = skynet.call(protod, "lua", "loadindex", protoloader.GAME)
+		host = protoloader.loadbyserver (protoindex)
+
 		return gamed.open (conf)
 	end
 
@@ -38,11 +51,18 @@ function gameserver.start (gamed)
 		local type, name, args, response = host:dispatch (msg, sz)
 		assert (type == "REQUEST")
 		assert (name == "login")
-		assert (args.session and args.token)
-		local session = tonumber (args.session) or error ()
-		local account = gamed.auth_handler (session, args.token) or error ()
-		assert (account)
-		return account
+		assert (args, "invalid request")
+		assert (args.login_session, "invalid request login_session")
+		assert (args.token, "invalid request token")
+
+		local login_session = assert(tonumber (args.login_session),
+			string.format("invalid request login_session: %d", args.login_session))
+		local account_id = gamed.auth_handler (login_session, args.token)
+		send_msg (fd, response ({
+			success = account_id ~= nil,
+		}))
+		return assert(account_id,
+			string.format("login_session: %d auth verify failed", login_session))
 	end
 
 	local traceback = debug.traceback
@@ -53,17 +73,18 @@ function gameserver.start (gamed)
 		else
 			pending_msg[fd] = {}
 
-			local ok, account = xpcall (do_login, traceback, fd, msg, sz)
+			local ok, account_id = xpcall (do_login, traceback, fd, msg, sz)
 			if ok then
-				syslog.noticef ("account %d login success", account)
-				local agent = gamed.login_handler (fd, account)
+				syslog.noticef ("<login> login account_id: %d login success", account_id)
+				
+				local agent = gamed.login_handler (fd, account_id)
 				queue = pending_msg[fd]
 				for _, t in pairs (queue) do
-					syslog.noticef ("forward pending message to agent %d", agent)
+					syslog.noticef ("    forward pending message to agent %d", agent)
 					skynet.rawcall(agent, "client", t.msg, t.sz)
 				end
 			else
-				syslog.warningf ("%s login failed : %s", addr, account)
+				syslog.warningf ("    login failed : %s", account_id)
 				gateserver.close_client (fd)
 			end
 

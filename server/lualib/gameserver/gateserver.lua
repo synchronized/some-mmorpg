@@ -1,6 +1,6 @@
 local skynet = require "skynet"
-local netpack = require "netpack"
-local socketdriver = require "socketdriver"
+local netpack = require "skynet.netpack"
+local socketdriver = require "skynet.socketdriver"
 
 local syslog = require "syslog"
 
@@ -127,6 +127,10 @@ function gateserver.start (handler)
 
 	MSG.more = dispatch_queue
 
+	function MSG.init(id, addr, port)
+		-- skynet.error("MSG.init")
+	end
+
 	skynet.register_protocol {
 		name = "socket",
 		id = skynet.PTYPE_SOCKET,
@@ -136,7 +140,12 @@ function gateserver.start (handler)
 		dispatch = function (_, _, q, type, ...)
 			queue = q
 			if type then
-				return MSG[type] (...) 
+				local f = MSG[type]
+				if f then
+					return f (...) 
+				else
+					error("invalid type:"..type)
+				end
 			end
 		end,
 	}

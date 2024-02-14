@@ -1,5 +1,6 @@
 local map = {
-	["Stormwind City"] = { 
+	-- 暴风城
+	["Stormwind City"] = {
 		name = "Stormwind City",
 		bbox = {
 			left = 0,
@@ -9,7 +10,8 @@ local map = {
 		},
 		radius = 20,
 	},
-	["Orgrimmar"] = { 
+	-- 奥格瑞玛
+	["Orgrimmar"] = {
 		name = "Orgrimmar",
 		bbox = {
 			left = 0,

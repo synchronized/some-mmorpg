@@ -1,3 +1,4 @@
+-- 最大生命值
 local health_max = {
 	warrior = {
 		[1] = 100,
@@ -12,6 +13,7 @@ local health_max = {
 	},
 }
 
+-- 力量
 local strength = {
 	human = {
 		[1] = 22,
@@ -25,6 +27,8 @@ local strength = {
 	},
 }
 
+
+-- 耐力
 local stamina = {
 	human = {
 		[1] = 21,

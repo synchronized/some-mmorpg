@@ -13,7 +13,7 @@ random_key () {
 	return BN_bin2bn (tmp, sizeof (tmp), NULL);
 }
 
-static void 
+static void
 push_bn (lua_State *L, BIGNUM *bn) {
 	char buf[1024];
 	int len = BN_bn2bin (bn, (unsigned char *)buf);

@@ -1,5 +1,7 @@
-local core = require "uuid.core"
 local skynet = require "skynet"
+
+local core = require "uuid.core"
+
 local skynet_timeout = skynet.timeout
 
 

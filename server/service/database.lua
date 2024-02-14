@@ -11,9 +11,9 @@ local ngroup
 
 local function hash_str (str)
 	local hash = 0
-	string.gsub (str, "(%w)", function (c)
+	for c in string.gmatch(str, "(%w)") do
 		hash = hash + string.byte (c)
-	end)
+	end
 	return hash
 end
 
@@ -22,7 +22,7 @@ local function hash_num (num)
 	return hash
 end
 
-function connection_handler (key)
+local function connection_handler (key)
 	local hash
 	local t = type (key)
 	if t == "string" then
@@ -56,21 +56,23 @@ skynet.start (function ()
 	skynet.dispatch ("lua", function (_, _, mod, cmd, ...)
 		local m = MODULE[mod]
 		if not m then
-			return skynet.ret ()
+			error(string.format("Unknown module: %s", tostring(mod)))
 		end
 		local f = m[cmd]
 		if not f then
-			return skynet.ret ()
+			error(string.format("Unknown module: %s command: %s", tostring(mod), tostring(cmd)))
 		end
 		
 		local function ret (ok, ...)
 			if not ok then
+				local strerr = tostring(...)
+				skynet.error("call db handle error : " .. strerr)
 				skynet.ret ()
 			else
 				skynet.retpack (...)
 			end
-
 		end
+
 		ret (xpcall (f, traceback, ...))
 	end)
 end)

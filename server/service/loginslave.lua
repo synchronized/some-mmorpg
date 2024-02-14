@@ -1,5 +1,5 @@
 local skynet = require "skynet"
-local socket = require "socket"
+local socket = require "skynet.socket"
 
 local syslog = require "syslog"
 local protoloader = require "protoloader"
@@ -8,7 +8,6 @@ local aes = require "aes"
 local uuid = require "uuid"
 
 local traceback = debug.traceback
-
 
 local master
 local database
@@ -26,7 +25,11 @@ local CMD = {}
 function CMD.init (m, id, conf)
 	master = m
 	database = skynet.uniqueservice ("database")
-	host = protoloader.load (protoloader.LOGIN)
+	
+	local protod = skynet.uniqueservice ("protod")
+	local protoindex = skynet.call (protod, "lua", "loadindex", protoloader.LOGIN)
+	host = protoloader.loadbyserver (protoindex)
+
 	auth_timeout = conf.auth_timeout * 100
 	session_expire_time = conf.session_expire_time * 100
 	session_expire_time_in_second = conf.session_expire_time
@@ -71,75 +74,98 @@ function CMD.auth (fd, addr)
 	assert (type == "REQUEST")
 
 	if name == "handshake" then
-		assert (args and args.name and args.client_pub, "invalid handshake request")
+		-- handshake
+		assert (args, "invalid handshake request")
+		assert (args.username, "invalid handshake request username")
+		assert (args.client_pub, "invalid handshake request client_pub")
+		local username = args.username
+		skynet.error(string.format("<login> handshake username: %s", username))
 
-		local account = skynet.call (database, "lua", "account", "load", args.name) or error ("load account " .. args.name .. " failed")
+		local account = assert(skynet.call (database, "lua", "account", "load", username),
+			"load account username: " .. username .. " failed")
 
 		local session_key, _, pkey = srp.create_server_session_key (account.verifier, args.client_pub)
 		local challenge = srp.random ()
 		local msg = response {
-					user_exists = (account.id ~= nil),
-					salt = account.salt,
-					server_pub = pkey,
-					challenge = challenge,
-				}
+			user_exists = (account.account_id ~= nil),
+			salt = account.salt,
+			server_pub = pkey,
+			challenge = challenge,
+		}
 		send_msg (fd, msg)
 
+		-- auth
 		type, name, args, response = read_msg (fd)
 		assert (type == "REQUEST" and name == "auth" and args and args.challenge, "invalid auth request")
 
 		local text = aes.decrypt (args.challenge, session_key)
 		assert (challenge == text, "auth challenge failed")
 
-		local id = tonumber (account.id)
-		if not id then
+		skynet.error(string.format("<login> auth username: %s", username))
+
+		local account_id = tonumber (account.account_id)
+		if not account_id then
 			assert (args.password)
-			id = uuid.gen ()
+			account_id = uuid.gen ()
 			local password = aes.decrypt (args.password, session_key)
-			account.id = skynet.call (database, "lua", "account", "create", id, account.name, password) or error (string.format ("create account %s/%d failed", args.name, id))
+			account.account_id = assert(skynet.call (database, "lua", "account", "create", account_id, username, password),
+				string.format ("create account %s/%d failed", username, account_id))
+
+			skynet.error(string.format("    account username: %s account_id: %d create", username, account_id))
+		else
+			skynet.error(string.format("    account username: %s account_id: %d login", username, account_id))
 		end
 		
 		challenge = srp.random ()
-		local session = skynet.call (master, "lua", "save_session", id, session_key, challenge)
+		local login_session = skynet.call (master, "lua", "save_session", account_id, session_key, challenge)
+
+		skynet.error(string.format("    account username: %s account_id: %d login_session: %d", username, account_id, login_session))
 
 		msg = response {
-				session = session,
-				expire = session_expire_time_in_second,
-				challenge = challenge,
-			}
+			login_session = login_session,
+			expire = session_expire_time_in_second,
+			challenge = challenge,
+		}
 		send_msg (fd, msg)
 		
 		type, name, args, response = read_msg (fd)
 		assert (type == "REQUEST")
 	end
 
+	-- challenge
 	assert (name == "challenge")
-	assert (args and args.session and args.challenge)
+	assert (args and args.login_session and args.challenge)
 
-	local token, challenge = skynet.call (master, "lua", "challenge", args.session, args.challenge)
+	local token, challenge = skynet.call (master, "lua", "challenge", args.login_session, args.challenge)
 	assert (token and challenge)
 
 	local msg = response {
-			token = token,
-			challenge = challenge,
+		token = token,
+		challenge = challenge,
 	}
 	send_msg (fd, msg)
 
 	close (fd)
 end
 
-function CMD.save_session (session, account, key, challenge)
-	saved_session[session] = { account = account, key = key, challenge = challenge }
+function CMD.save_session (login_session, account_id, session_key, challenge)
+	skynet.error(string.format("    account account_id: %d, login_session: %d savesession ", account_id, login_session))
+
+	saved_session[login_session] = { account_id = account_id, key = session_key, challenge = challenge }
 	skynet.timeout (session_expire_time, function ()
-		local t = saved_session[session]
-		if t and t.key == key then
-			saved_session[session] = nil
+		local t = saved_session[login_session]
+		if t then
+			if t and t.key == key then
+				saved_session[login_session] = nil
+			end
 		end
 	end)
 end
 
-function CMD.challenge (session, secret)
-	local t = saved_session[session] or error ()
+function CMD.challenge (login_session, secret)
+	skynet.error(string.format("    account login_session: %d verify challenge secret", login_session))
+
+	local t = saved_session[login_session] or error ()
 
 	local text = aes.decrypt (secret, t.key) or error ()
 	assert (text == t.challenge)
@@ -150,14 +176,17 @@ function CMD.challenge (session, secret)
 	return t.token, t.challenge
 end
 
-function CMD.verify (session, secret)
-	local t = saved_session[session] or error ()
+function CMD.verify (login_session, secret)
+	skynet.error(string.format("    account login_session: %d verify secret", login_session))
 
-	local text = aes.decrypt (secret, t.key) or error ()
-	assert (text == t.token)
+	local t = saved_session[login_session] or error (string.format("login_session: %d invalid or expire ", login_session))
+
+	local text = aes.decrypt (secret, t.key) or error (string.format("login_session: %d secret decrypt failed", login_session))
+	assert (text == t.token, 
+		string.format("account login_session: %d verify token failed", login_session))
 	t.token = nil
 
-	return t.account
+	return t.account_id
 end
 
 skynet.start (function ()
