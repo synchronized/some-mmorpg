@@ -1,12 +1,15 @@
 #!/bin/bash
 
-BASEDIR="${PWD}/$(dirname $0)"
+CURRDIR=$(cd "$(dirname "$0")";pwd)
+PROJECTDIR=$(dirname "${CURRDIR}")
+PATH="${PATH}:${PROJECTDIR}/bin"
 
 for i in `seq 0 32`
 do
 	NAME="redis${i}"
-	DIR="${BASEDIR}/${NAME}"
-	cd ${DIR}
-	redis-server ${NAME}.conf
+	DIR="${CURRDIR}/${NAME}"
+	if [ -d ${DIR} ]; then
+		cd ${DIR}
+		redis-server ${NAME}.conf
+	fi
 done
-

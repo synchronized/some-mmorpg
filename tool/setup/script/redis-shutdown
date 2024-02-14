@@ -1,9 +1,15 @@
 #!/bin/bash
 
+CURRDIR=$(cd "$(dirname "$0")";pwd)
+PROJECTDIR=$(dirname "${CURRDIR}")
+PATH="${PATH}:${PROJECTDIR}/bin"
+
 for i in `seq 0 32`
 do
-	PORT=$(($i + 6379))
-	redis-cli -p ${PORT} shutdown
-	cd ..
+	NAME="redis${i}"
+	DIR="${CURRDIR}/${NAME}"
+	if [ -d ${DIR} ]; then
+		PORT=$(($i + 6379))
+		redis-cli -p ${PORT} shutdown
+	fi
 done
-

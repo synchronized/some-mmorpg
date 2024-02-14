@@ -31,5 +31,6 @@
 *.pid
 
 # other files
+bin/
 var/
 client/anonymous

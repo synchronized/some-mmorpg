@@ -3,4 +3,9 @@
 export SERVER_NAME=smmo
 export OS=$(uname -s)
 
-../3rd/skynet/skynet config
+CURRDIR=$(cd "$(dirname "$0")";pwd)
+PROJECTDIR=$(dirname "${CURRDIR}")
+
+cd ${PROJECTDIR}/server
+
+${PROJECTDIR}/3rd/skynet/skynet config
