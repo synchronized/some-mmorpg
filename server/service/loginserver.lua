@@ -1,63 +1,77 @@
 local skynet = require "skynet"
-local socket = require "skynet.socket"
 
-local syslog = require "syslog"
-local config = require "config.system"
+local service = require "service"
+local client = require "client"
+local protoloader = require "protoloader"
+local log = require "log"
 
+local works = {}
 
-local session_id = 1
-local slave = {}
-local nslave
-local gameserver = {}
+local data = {
+	session_id = 1,
+	balance = 1,
+	nwork = 0,
+}
 
-local CMD = {}
+local users = {}
 
-function CMD.open (conf)
-	for i = 1, conf.slave do
-		local s = skynet.newservice ("loginslave")
+local loginserver = {}
+
+function loginserver.open (conf)
+	for i = 1, conf.nwork or 8 do
+		local s = skynet.newservice ("loginwork")
 		skynet.call (s, "lua", "init", skynet.self (), i, conf)
-		table.insert (slave, s)
+		table.insert (works, s)
 	end
-	nslave = #slave
-
-	local host = conf.host or "0.0.0.0"
-	local port = assert (tonumber (conf.port))
-	local sock = socket.listen (host, port)
-
-	syslog.noticef ("listen on %s:%d", host, port)
-
-	local balance = 1
-	socket.start (sock, function (fd, addr)
-		local s = slave[balance]
-		balance = balance + 1
-		if balance > nslave then balance = 1 end
-
-		skynet.call (s, "lua", "auth", fd, addr)
-	end)
+	data.nwork = #works
 end
 
-function CMD.save_session (account_id, session_key, challenge)
-	local login_session = session_id
-	session_id = session_id + 1
+local function getnextworkindex()
+	local result = data.balance
+	data.balance = data.balance + 1
+	if data.balance > data.nwork then data.balance = 1 end
+	return result
+end
 
-	s = slave[(login_session % nslave) + 1]
+function loginserver.shakehand(fd, addr)
+	log ("shakehand fd:%d", fd)
+
+	local s = works[getnextworkindex()]
+
+	return skynet.call (s, "lua", "auth", fd, addr)
+end
+
+local function getnextlogin_session()
+	local login_session = data.session_id
+	data.session_id = data.session_id + 1
+	return login_session
+end
+
+function loginserver.save_session (account_id, session_key, challenge)
+	local login_session = getnextlogin_session()
+
+	s = works[(login_session % data.nwork) + 1]
 	skynet.call (s, "lua", "save_session", login_session, account_id, session_key, challenge)
 	return login_session
 end
 
-function CMD.challenge (login_session, challenge)
-	s = slave[(login_session % nslave) + 1]
+function loginserver.challenge (login_session, challenge)
+	s = works[(login_session % data.nwork) + 1]
 	return skynet.call (s, "lua", "challenge", login_session, challenge)
 end
 
-function CMD.verify (login_session, token)
-	local s = slave[(login_session % nslave) + 1]
+function loginserver.verify (login_session, token)
+	local s = works[(login_session % data.nwork) + 1]
 	return skynet.call (s, "lua", "verify", login_session, token)
 end
 
-skynet.start (function ()
-	skynet.dispatch ("lua", function (_, _, command, ...)
-		local f = assert (CMD[command])
-		skynet.retpack (f (...))
-	end)
-end)
+function loginserver.get_account_id (login_session)
+	local s = works[(login_session % data.nwork) + 1]
+	return skynet.call (s, "lua", "get_account_id", login_session)
+end
+
+service.init {
+	command = loginserver,
+	info = users,
+	init = client.init (protoloader.LOGIN),
+}

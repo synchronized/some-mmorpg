@@ -1,18 +1,24 @@
 local skynet = require "skynet"
 
+local log = require "log"
+
 local config = require "config.system"
-local login_config = require "config.loginserver"
-local game_config = require "config.gameserver"
+local config_login = require "config.loginserver"
 
 skynet.start(function()
+	log ("Server start")
+	if not skynet.getenv "daemon" then
+		local console = skynet.newservice("console")
+	end
 	skynet.newservice ("debug_console", config.debug_port)
 	skynet.uniqueservice ("protod")
 	skynet.uniqueservice ("database")
 
-	local loginserver = skynet.newservice ("loginserver")
-	skynet.call (loginserver, "lua", "open", login_config)	
+	local loginserver = skynet.uniqueservice "loginserver"
+	skynet.call(loginserver, "lua", "open", config_login)
 
-	local gamed = skynet.newservice ("gamed", loginserver)
-	
-	skynet.call (gamed, "lua", "open", game_config)
+	local hub = skynet.uniqueservice "hub"
+	skynet.call(hub, "lua", "open", config_login)
+
+	skynet.exit()
 end)

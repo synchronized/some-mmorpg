@@ -4,9 +4,14 @@ local game_proto = {}
 
 local types = [[
 
+.result {
+    error_code 0 : integer             # error code
+}
+
 .package {
     type 0 : integer
     session 1 : integer
+    ud 2 : result
 }
 
 .general {
@@ -86,6 +91,12 @@ local types = [[
 ]]
 
 local c2s = [[
+
+ping 0 {
+    request {
+    }
+    response {}
+}
 
 login 1 {
     request {

@@ -6,6 +6,4 @@ export OS=$(uname -s)
 CURRDIR=$(cd "$(dirname "$0")";pwd)
 PROJECTDIR=$(dirname "${CURRDIR}")
 
-cd ${PROJECTDIR}/server
-
-${PROJECTDIR}/3rd/skynet/skynet config
+${PROJECTDIR}/3rd/skynet/skynet ${PROJECTDIR}/server/config

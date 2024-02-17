@@ -1,26 +1,23 @@
 local skynet = require "skynet"
-local queue = require "skynet.queue"
-local sharemap = require "skynet.sharemap"
-local socket = require "skynet.socket"
 
-local syslog = require "syslog"
+local service = require "service"
+local client = require "client"
+local log = require "log"
+
 local protoloader = require "protoloader"
 local character_handler = require "agent.character_handler"
 local map_handler = require "agent.map_handler"
 local aoi_handler = require "agent.aoi_handler"
-local move_handler = require "agent.move_handler"
 local combat_handler = require "agent.combat_handler"
 
+local cjsonutil = require "cjson.util"
 
-local gamed = tonumber (...)
-
-local host
-local proto_request
+local traceback = debug.traceback
 
 --[[
 .user {
 	fd : integer
-	account : integer
+	account_id : integer
 
 	character : character
 	world : integer
@@ -28,204 +25,162 @@ local proto_request
 }
 ]]
 
-local user
+local user = {}
 
-local function send_msg (fd, msg)
-	local package = string.pack (">s2", msg)
-	socket.write (fd, package)
+local cli = client.handler()
+
+function cli:ping()
+	-- log ("account_id: %d ping", tonumber(user.account_id))
+	return nil
 end
 
-local user_fd
-local client_session_map = {}
-local client_session_id = 0
-local function send_request (name, args)
-	client_session_id = client_session_id + 1
-	local str = proto_request (name, args, client_session_id)
-	send_msg (user_fd, str)
-	client_session_map[client_session_id] = { name = name, args = args }
-end
-
-local function kick_self ()
-	skynet.call (gamed, "lua", "kick", skynet.self (), user_fd)
+local function kick_agent ()
+	if user.account_id then
+		log ("agent kicked")
+		skynet.call(service.manager, "lua", "kick", user.account_id)	-- report exit
+	end
 end
 
 local last_heartbeat_time
 local HEARTBEAT_TIME_MAX = 0 -- 60 * 100
 local function heartbeat_check ()
-	if HEARTBEAT_TIME_MAX <= 0 or not user_fd then return end
+	if HEARTBEAT_TIME_MAX <= 0 or not user.fd then return end
 
 	local t = last_heartbeat_time + HEARTBEAT_TIME_MAX - skynet.now ()
 	if t <= 0 then
-		syslog.warning ("heatbeat check failed")
-		kick_self ()
+		log ("heatbeat check failed")
+		kick_agent ()
 	else
 		skynet.timeout (t, heartbeat_check)
 	end
 end
 
-local traceback = debug.traceback
-local REQUEST
-local function handle_request (name, args, response)
-	local f = REQUEST[name]
-	if f then
-		local ok, ret = xpcall (f, traceback, args)
-		if not ok then
-			syslog.warningf ("handle message(%s) failed : %s", name, ret) 
-			kick_self ()
-		else
-			last_heartbeat_time = skynet.now ()
-			if response and ret then
-				send_msg (user_fd, response (ret))
-			end
-		end
-	else
-		syslog.warningf ("unhandled message : %s", name)
-		kick_self ()
-	end
-end
-
-local RESPONSE
-local function handle_response (id, args)
-	local s = client_session_map[id]
-	if not s then
-		syslog.warningf ("client_session_id: %d not found", id)
-		kick_self ()
-		return
-	end
-
-	local f = RESPONSE[s.name]
-	if not f then
-		syslog.warningf ("client_session_id: %d unhandled response: %s", id, s.name)
-		kick_self ()
-		return
-	end
-
-	local ok, ret = xpcall (f, traceback, s.args, args)
-	if not ok then
-		syslog.warningf ("client_session_id: %d handle response(%s) failed: %s", id, s.name, ret) 
-		kick_self ()
-	end
-end
-
-skynet.register_protocol {
-	name = "client",
-	id = skynet.PTYPE_CLIENT,
-	unpack = function (msg, sz)
-		return host:dispatch (msg, sz)
-	end,
-	dispatch = function (_, _, type, ...)
-		if type == "REQUEST" then
-			handle_request (...)
-		elseif type == "RESPONSE" then
-			handle_response (...)
-		else
-			syslog.warningf ("invalid message type : %s", type) 
-			kick_self ()
-		end
-		skynet.ret();
-	end,
+local agent = {
+	-- CMD = {}
 }
 
-local CMD = {}
+local function new_user()
+	assert(user, string.format("invalid user data"))
+	local fd = user.fd
+	local ok, error = pcall(client.dispatch, user)
+	log("fd=%d is gone. error = %s", fd, tostring(error))
+	client.close(fd)
+	if user.fd == fd then
+		user.fd = nil
+		skynet.sleep(1000)	-- exit after 10s
+		if user.fd == nil then
+			-- double check
+			if not user.exit then
+				user.exit = true	-- mark exit
+				kick_agent()
+				log("user %s afk", user.account_id)
+			end
+		end
+	end
+end
 
-function CMD.open (fd, account_id)
-	skynet.error(string.format ("agent account_id: %d has created", account_id))
+function agent.assign (fd, account_id)
+	if user.fd then
+		error(string.format(
+			"agent repeat assign account_id: %d, new account_id: %d", 
+			user.account_id, account_id))
+	end
 
-	user = { 
-		fd = fd, 
-		account_id = account_id,
-		REQUEST = {},
-		RESPONSE = {},
-		CMD = CMD,
-		send_request = send_request,
-	}
-	user_fd = user.fd
-	REQUEST = user.REQUEST
-	RESPONSE = user.RESPONSE
+	log ("agent account_id: %d has created", account_id)
+
+	if user.account_id == account_id then
+		user.fd = fd
+		user.exit = nil
+	else
+		user = {
+			fd = fd, 
+			account_id = account_id,
+			REQUEST = {},
+			RESPONSE = {},
+			CMD = {},
+		}
+	end
+
+	agent.CMD = user.CMD
 	
 	character_handler:register(user)
 
 	last_heartbeat_time = skynet.now ()
 	heartbeat_check ()
+
+	skynet.fork(new_user)
+	return true
 end
 
-function CMD.close ()
-	syslog.debug ("agent closed")
+function agent.close()
+	log.printf ("agent closed account_id: %d", user.account_id)
 	
-	local account_id
-	if user then
-		account_id = user.account_id
-
+	if user.account_id then
+		local account_id = user.account_id
 		if user.map then
-			skynet.call (user.map, "lua", "character_leave")
-			user.map = nil
-			map_handler:unregister (user)
-			aoi_handler:unregister (user)
-			move_handler:unregister (user)
-			combat_handler:unregister (user)
+			skynet.call (user.map, "lua", "character_leave", user.character.id)
 		end
 
 		if user.world then
 			skynet.call (user.world, "lua", "character_leave", user.character.id)
-			user.world = nil
 		end
 
 		character_handler.save (user.character)
 
-		user = nil
-		user_fd = nil
-		REQUEST = nil
+		user = {}
+		agent.CMD = nil
+
+		skynet.call (service.manager, "lua", "exit", account_id)
 	end
-
-	skynet.call (gamed, "lua", "close", skynet.self (), account_id)
 end
 
-function CMD.kick ()
-	error ()
-	syslog.debug ("agent kicked")
-	skynet.call (gamed, "lua", "kick", skynet.self (), user_fd)
+function agent.kick ()
+	kick_agent()
 end
 
-function CMD.world_enter (world)
-	skynet.error(string.format("agent character: %d(%s) world enter", user.character.id, user.character.general.name))
-
-	character_handler.on_enter_world(user.character)
+function agent.world_enter (world)
+	log ("agent character: %d(%s) world enter", 
+		user.character.id, user.character.general.name)
 
 	user.world = world
 	character_handler:unregister(user)
-
-	return user.character.general.map, user.character.movement.pos
 end
 
-function CMD.map_enter (map)
+function agent.world_leave (character_id)
+	if user.character and user.character.id == character_id then
+		log ("agent character: %d(%s) world leave", 
+			user.character.id, user.character.general.name)
+		user.world = nil
+	end
+end
+
+function agent.map_enter (map)
+	log ("agent character: %d(%s) map enter", 
+		user.character.id, user.character.general.name)
+
 	user.map = map
 
 	map_handler:register (user)
 	aoi_handler:register (user)
-	move_handler:register (user)
 	combat_handler:register (user)
 end
 
-skynet.start (function ()
-	local protod = skynet.uniqueservice ("protod")
-	local protoindex = skynet.call(protod, "lua", "loadindex", protoloader.GAME)
-	host, proto_request = protoloader.loadbyserver (protoindex)
-	
-	skynet.dispatch ("lua", function (session, source, command, ...)
-		skynet.error(string.format("agent receive lua message session: %d, source: %d, command:%s", session, source, command))
-		local f = CMD[command]
-		if not f then
-			syslog.warningf ("    unhandled message(%s)", command) 
-			return skynet.ret ()
-		end
+function agent.map_leave (character_id)
+	if user.character and user.character.id == character_id then
+		log ("agent character: %d(%s) map leave", 
+			user.character.id, user.character.general.name)
+		user.map = nil
+		map_handler:unregister (user)
+		aoi_handler:unregister (user)
+		combat_handler:unregister (user)
+	end
+end
 
-		local ok, ret = xpcall (f, traceback, ...)
-		if not ok then
-			syslog.warningf ("    handle message(%s) failed : %s", command, ret) 
-			kick_self ()
-			return skynet.ret ()
-		end
-		skynet.retpack (ret)
-	end)
-end)
-
+service.init {
+	command = agent,
+	-- info = data,
+	require = {
+		"manager",
+	},
+	init = client.init (protoloader.GAME),
+}

@@ -1,7 +1,7 @@
 local skynet = require "skynet"
-local sharedata = require "skynet.sharedata"
 
-local syslog = require "syslog"
+local log = require "log"
+
 local mapdata = require "gddata.map"
 
 local CMD = {}
@@ -9,35 +9,42 @@ local map_instance = {}
 local online_character = {}
 
 function CMD.kick (character)
-	local a = online_character[character]
-	if a then
-		skynet.call (a, "lua", "kick")
+	local userdata = online_character[character]
+	if userdata then
+		skynet.call (userdata.agent, "lua", "kick")
 		online_character[character] = nil
 	end
 end
 
-function CMD.character_enter (agent, character)
-	if online_character[character] ~= nil then
-		syslog.notice (string.format ("multiple login detected, character %d", character))
-		CMD.kick (character)
-	end
-
-	online_character[character] = agent
-	syslog.notice (string.format ("character(%d) enter world", character))
-	local map, pos = skynet.call (agent, "lua", "world_enter", skynet.self ())
-		
-	local m = map_instance[map]
-	if not m then
-		CMD.kick (character)
+function CMD.character_enter (agent, character_id, map, pos)
+	if online_character[character_id] ~= nil then
+		log ("multiple login detected, character_id %d", character_id)
+		CMD.kick (character_id)
 		return
 	end
 
-	skynet.call (m, "lua", "character_enter", agent, character, pos)
+	local userdata = { agent = agent, character_id = character_id, map = map}
+	online_character[character_id] = userdata
+	local m = map_instance[map]
+	if not m then
+		log ("agent map not found map: %s", map)
+		CMD.kick (character_id)
+		return
+	end
+
+	log ("character(%d) enter world", character_id)
+	skynet.call (agent, "lua", "world_enter", skynet.self ())
+
+	skynet.call (m, "lua", "character_enter", agent, character_id, pos)
 end
 
-function CMD.character_leave (agent, character)
-	syslog.notice (string.format ("character(%d) leave world", character))
-	online_character[character] = nil
+function CMD.character_leave (agent, character_id)
+	log ("character(%d) leave world", character_id)
+	local userdata = online_character[character_id]
+	if userdata then
+		online_character[character_id] = nil
+		skynet.call (userdata.agent, "lua", "world_leave", userdata.character_id)
+	end
 end
 
 skynet.start (function ()

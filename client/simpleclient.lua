@@ -5,13 +5,13 @@ USERNAME = USERNAME or "sunday1"
 PASSWORD = PASSWORD or "123456"
 
 package.path = table.concat({
-	PATH.."/client/?.lua",
 	PATH.."/client/lualib/?.lua",
-	PATH.."/common/?.lua",
+	PATH.."/common/lualib/?.lua",
 	PATH.."/3rd/skynet/lualib/?.lua",
 }, ";")
 package.cpath = table.concat({
 	PATH.."/client/luaclib/?.so",
+	PATH.."/common/luaclib/?.so",
 	PATH.."/server/luaclib/?.so",
 	PATH.."/3rd/skynet/luaclib/?.so",
 }, ";")
@@ -21,6 +21,8 @@ local protoloader = require "protoloader"
 local srp = require "srp"
 local aes = require "aes"
 local cjsonutil = require "cjson.util"
+local lsocket = require "lsocket"
+local tableext = require "somemmo.tableext"
 
 protoloader.init()
 
@@ -35,34 +37,11 @@ do
 	end
 end
 
-local event = {}
-
-function event:__error(what, err, req, session)
-	print("error", what, err)
-end
+local event = {
+	authed = false
+}
 
 function event:ping()
-	print("ping")
-end
-
-function event:signin(req, resp)
-	print("signin", req.userid, resp.ok)
-	if resp.ok then
-		message.request "ping"	-- should error before login
-		message.request "login"
-	else
-		-- signin failed, signup
-		message.request("signup", { userid = "alice" })
-	end
-end
-
-function event:signup(req, resp)
-	print("signup", resp.ok)
-	if resp.ok then
-		message.request("signin", { userid = req.userid })
-	else
-		error "Can't signup"
-	end
 end
 
 function event:request_shakehand()
@@ -72,7 +51,12 @@ function event:request_shakehand()
 	message.request ("handshake", { username = user.username, client_pub = public_key })
 end
 
-function event:handshake (req, resp)
+function event:handshake (req, resp, ret)
+	if ret then
+		print(string.format("<error> RESPONSE.handshake ret:", cjsonutil.serialise_value(ret)))
+		return
+	end
+
 	local username = user.username
 
 	if resp.user_exists then
@@ -93,7 +77,12 @@ function event:handshake (req, resp)
 	end
 end
 
-function event:auth (req, resp)
+function event:auth (req, resp, ret)
+	if ret then
+		print(string.format("<error> RESPONSE.auth ret:", cjsonutil.serialise_value(ret)))
+		return
+	end
+
 	local username = user.username
 
 	user.login_session = resp.login_session
@@ -104,36 +93,74 @@ function event:auth (req, resp)
 	})
 end
 
-function event:challenge (req, resp)
+function event:challenge (req, resp, ret)
+	if ret then
+		print(string.format("<error> RESPONSE.challenge ret:", cjsonutil.serialise_value(ret)))
+		return
+	end
 
-	local token = aes.encrypt (resp.token, user.session_key)
+	user.token = aes.encrypt (resp.token, user.session_key)
 
-	message.disconnect()
 	message.register(protoloader.GAME)
-	message.peer(IP, 9555)
-	message.connect()
+	self.authed = true
 
-	message.request ("login", { 
-		login_session = user.login_session,
-		token = token,
-	})
-
-end
-
-function event:login (req, resp)
 	message.request ("character_list")
 end
 
-function event:character_list (req, resp)
+function event:character_list (req, resp, ret)
+	if ret then
+		print(string.format("<error> RESPONSE.character_list ret:", cjsonutil.serialise_value(ret)))
+		return
+	end
+
+	local character_id = next(resp.character)
+	print(string.format("choose characterId: %s", tostring(character_id)))
+	if not character_id then
+		message.request("character_create", {
+			character = {
+				name = string.format("%s-%s", user.username, "hello"),
+				race = "human",
+				class = "warrior" ,
+			},
+		})
+	else
+		message.request("character_pick", {
+			id = character_id,
+		})
+	end
+end
+
+function event:character_create (req, resp, ret)
+	if ret then
+		print(string.format("<error> RESPONSE.character_create ret:", cjsonutil.serialise_value(ret)))
+		return
+	end
+
+	message.request ("character_list")
+end
+
+local cli = {
+	authed = false,
+	pingtime = os.time()
+}
+function cli:update()
+	if self.authed then
+		local timenow = os.time()
+		if timenow - self.pingtime > 5 then
+			self.pingtime = timenow
+			message.request("ping")
+		end
+	end
 end
 
 message.register(protoloader.LOGIN)
 message.peer(IP, 9777)
 message.connect()
-message.bind({}, event)
+message.bind(cli, event)
 
 event:request_shakehand()
 
 while true do
-	message.update(1)
+	message.update(5)
+	cli:update()
 end

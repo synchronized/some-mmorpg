@@ -43,8 +43,10 @@ function message.request(name, args)
 	var.session[var.session_id] = { name = name, req = args }
 	socket.write(var.request(name , args, var.session_id))
 
-	print(string.format("==> REQUEST %s(%d) data: %s", 
-		name, var.session_id, cjsonutil.serialise_value(args)))
+	if name ~= "ping" then
+		print(string.format("==> REQUEST %s(%d) data: %s", 
+			name, var.session_id, cjsonutil.serialise_value(args)))
+	end
 	return var.session_id
 end
 
@@ -53,10 +55,8 @@ function message.dispatch_message(ti)
 	if not msg then
 		return false
 	end
-	local t, session_id, resp, err = var.host:dispatch(msg)
+	local t, session_id, resp, ret = var.host:dispatch(msg)
 	if t == "REQUEST" then
-		print(string.format("<== REQUEST %s error(%s) data: %s", 
-			session_id, tostring(err), cjsonutil.serialise_value(resp)))
 		for obj, handler in pairs(var.object) do
 			local f = handler[session_id]	-- session_id is request type
 			if f then
@@ -69,30 +69,21 @@ function message.dispatch_message(ti)
 	else
 		local session = var.session[session_id]
 		var.session[session_id] = nil
-		print(string.format("<== RESPONSE %s(%d) error(%s) data: %s", 
-			session.name, session_id, tostring(err), cjsonutil.serialise_value(resp)))
+		if session.name ~= "ping" then
+			print(string.format("<== RESPONSE %s(%d) ret: %s data: %s", 
+				session.name, session_id, 
+				cjsonutil.serialise_value(ret), cjsonutil.serialise_value(resp)))
+		end
 
 		for obj, handler in pairs(var.object) do
-			if err then
-				local f = handler.__error
-				if f then
-					local ok, err_msg = pcall(f, obj, session.name, err, session.req, session_id)
-					if not ok then
-						print(string.format("    session %s[%d] error(%s) for [%s] error : %s", session.name, session_id, err, tostring(obj), err_msg))
-					end
-				else
-					print(string.format("    session %s[%d] error(%s) for [%s] error", session.name, session_id, err, tostring(obj)))
+			local f = handler[session.name]
+			if f then
+				local ok, err_msg = pcall(f, obj, session.req, resp, ret)
+				if not ok then
+					print(string.format("    session %s[%d] for [%s] error : %s", session.name, session_id, tostring(obj), err_msg))
 				end
 			else
-				local f = handler[session.name]
-				if f then
-					local ok, err_msg = pcall(f, obj, session.req, resp, session_id)
-					if not ok then
-						print(string.format("    session %s[%d] for [%s] error : %s", session.name, session_id, tostring(obj), err_msg))
-					end
-				else
-					print(string.format("    session %s[%d] for [%s] have no handler", session.name, session_id, tostring(obj)))
-				end
+				print(string.format("    session %s[%d] for [%s] have no handler", session.name, session_id, tostring(obj)))
 			end
 		end
 	end

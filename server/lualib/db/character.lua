@@ -1,7 +1,6 @@
 local skynet = require "skynet"
 
-local syslog = require "syslog"
-local packer = require "db.packer"
+local cjsonutil = require "cjson.util"
 
 local character = {}
 local connection_handler
@@ -39,8 +38,8 @@ end
 
 function character.reserve (character_id, name)
 	local connection, key, field = make_name_key (name)
-	if not connection:hsetnx (key, field, character_id) then
-		return 0
+	if connection:hsetnx (key, field, character_id) == 0 then
+		return
 	end
 	return character_id
 end
@@ -52,9 +51,7 @@ end
 
 function character.load (character_id)
 	local connection, key, field = make_character_key (character_id)
-	local data = assert(connection:hget (key, field), 
-		string.format("character_id: %d load failed key:%s, field:%d", character_id, key, field))
-	return data
+	return connection:hget (key, field)
 end
 
 function character.list (account_id)

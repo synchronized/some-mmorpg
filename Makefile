@@ -16,6 +16,9 @@ LSOCKET_INC ?= ../skynet/3rd/lua
 
 BIN_PATH ?= bin
 
+COMMON_ROOT ?= common
+COMMON_LUA_CLIB_PATH ?= $(COMMON_ROOT)/luaclib
+
 SERVER_ROOT ?= server
 SERVER_LUA_CLIB_PATH ?= $(SERVER_ROOT)/luaclib
 SERVER_CSERVICE_PATH ?= $(SERVER_ROOT)/cservice
@@ -33,17 +36,21 @@ LUA_LIB ?= $(LUA_STATICLIB)
 # bin
 BIN_OBJECT =
 
+# common
+COMMON_LUA_CLIB = cjson
+
 # server
-SERVER_CSERVICE = syslog
-SERVER_LUA_CLIB = srp aes cjson uuid
+SERVER_LUA_CLIB = srp aes uuid
+SERVER_CSERVICE = package
 
 # client
 CLIENT_LUA_CLIB = lsocket
 
 all : \
   $(foreach v, $(BIN_OBJECT), $(BIN_PATH)/$(v)) \
-  $(foreach v, $(SERVER_CSERVICE), $(SERVER_CSERVICE_PATH)/$(v).so) \
+  $(foreach v, $(COMMON_LUA_CLIB), $(COMMON_LUA_CLIB_PATH)/$(v).so) \
   $(foreach v, $(SERVER_LUA_CLIB), $(SERVER_LUA_CLIB_PATH)/$(v).so) \
+  $(foreach v, $(SERVER_CSERVICE), $(SERVER_CSERVICE_PATH)/$(v).so) \
   $(foreach v, $(CLIENT_LUA_CLIB), $(CLIENT_LUA_CLIB_PATH)/$(v).so) 
 
 $(BIN_PATH) :
@@ -58,13 +65,13 @@ $(SERVER_LUA_CLIB_PATH) :
 $(CLIENT_LUA_CLIB_PATH) :
 	mkdir $(CLIENT_LUA_CLIB_PATH)
 
-$(SERVER_LUA_CLIB_PATH)/cjson.so : | $(SERVER_LUA_CLIB_PATH)
+$(COMMON_LUA_CLIB_PATH)/cjson.so : | $(COMMON_LUA_CLIB_PATH)
 	cd $(CJSON_ROOT) && $(MAKE) LUA_INCLUDE_DIR=$(CJSON_INC) CC=$(CC) CJSON_LDFLAGS="$(SHARED)" && cd - && cp $(CJSON_ROOT)/cjson.so $@
 
 $(CLIENT_LUA_CLIB_PATH)/lsocket.so : | $(CLIENT_LUA_CLIB_PATH)
 	cd $(LSOCKET_ROOT) && $(MAKE) LUA_INCLUDE=$(LSOCKET_INC) && cd - && cp $(LSOCKET_ROOT)/lsocket.so $@
 
-$(SERVER_CSERVICE_PATH)/syslog.so : $(SERVER_ROOT)/service-src/service_syslog.c | $(SERVER_CSERVICE_PATH)
+$(SERVER_CSERVICE_PATH)/package.so : $(SERVER_ROOT)/service-src/service_package.c | $(SERVER_CSERVICE_PATH)
 	$(CC) $(CUSTOM_CFLAGS) $(SHARED) $< -o $@ -I$(SKYNET_ROOT)/skynet-src
 
 $(SERVER_LUA_CLIB_PATH)/srp.so : $(SERVER_ROOT)/lualib-src/lua-srp.c | $(SERVER_LUA_CLIB_PATH)
@@ -78,7 +85,7 @@ $(SERVER_LUA_CLIB_PATH)/uuid.so : $(SERVER_ROOT)/lualib-src/lua-uuid.c | $(SERVE
 
 
 clean :
-	rm -f $(SERVER_CSERVICE_PATH)/*.so $(SERVER_LUA_CLIB_PATH)/*.so $(CLIENT_LUA_CLIB_PATH)/*.so
+	rm -f $(COMMON_LUA_CLIB_PATH)/*.so $(SERVER_LUA_CLIB_PATH)/*.so $(SERVER_CSERVICE_PATH)/*.so $(CLIENT_LUA_CLIB_PATH)/*.so
 
 cleanall_cjson : 
 	cd $(CJSON_ROOT) && $(MAKE) clean

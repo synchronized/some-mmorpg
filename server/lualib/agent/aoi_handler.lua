@@ -1,7 +1,9 @@
 local skynet = require "skynet"
 local sharemap = require "skynet.sharemap"
 
-local syslog = require "syslog"
+local client = require "client"
+local log = require "log"
+
 local handler = require "agent.handler"
 
 local RESPONSE = {}
@@ -37,14 +39,8 @@ local function send_self (scope)
 	if flag.dirty and flag.wantmore then
 		flag.dirty = false
 		flag.wantmore = false
-		user.send_request (scope2proto[scope], { character = user.character })
+		client.request(user, scope2proto[scope], { character = user.character })
 	end
-end
-
-local function agent2id (agent)
-	local t = subscribe_agent[agent]
-	if not t then return end
-	return t.character.id
 end
 
 local function mark_flag (character, scope, field, value)
@@ -59,7 +55,7 @@ local function mark_flag (character, scope, field, value)
 end
 
 local function create_reader ()
-	syslog.debug ("aoi_handler create_reader")
+	log ("aoi_handler create_reader")
 	if not character_writer then
 		character_writer = sharemap.writer ("character", user.character)
 	end
@@ -67,7 +63,7 @@ local function create_reader ()
 end
 
 local function subscribe (agent, reader)
-	syslog.debugf ("aoi_handler aoi_subscribe agent(%d) reader(%s)", agent, reader)
+	log ("aoi_handler aoi_subscribe agent(%d) reader(%s)", agent, reader)
 	local c = sharemap.reader ("character", reader)
 
 	local flag = {}
@@ -83,11 +79,11 @@ local function subscribe (agent, reader)
 	subscribe_character[c.id] = t
 	subscribe_agent[agent] = t
 		
-	user.send_request ("aoi_add", { character = c })
+	client.request (user, "aoi_add", { character = c })
 end
 
 local function refresh_aoi (id, scope)
-	syslog.debugf ("refresh_aoi character(%d) scope(%s)", id, scope)
+	log ("refresh_aoi character(%d) scope(%s)", id, scope)
 
 	local t = subscribe_character[id]
 	if not t then return end
@@ -96,12 +92,12 @@ local function refresh_aoi (id, scope)
 	t = t.flag[scope]
 	if not t then return end
 
-	syslog.debugf ("dirty(%s) wantmore(%s)", t.dirty, t.wantmore)
+	log ("dirty(%s) wantmore(%s)", t.dirty, t.wantmore)
 
 	if t.dirty and t.wantmore then
 		c:update ()
 
-		user.send_request (scope2proto[scope], { character = c })
+		client.request (user, scope2proto[scope], { character = c })
 		t.wantmore = false
 		t.dirty = false
 	end
@@ -155,7 +151,7 @@ local function aoi_remove (list)
 				local id = t.character.id
 				subscribe_agent[agent] = nil
 				subscribe_character[id] = nil
-				user.send_request ("aoi_remove", { character = id })
+				client.request (user, "aoi_remove", { character = id })
 				skynet.call (agent, "lua", "aoi_unsubscribe", self)
 			end
 		end)
@@ -163,19 +159,19 @@ local function aoi_remove (list)
 end
 
 function CMD.aoi_subscribe (agent, reader)
-	syslog.debugf ("aoi_subscribe agent(%d) reader(%s)", agent, reader)
+	log ("aoi_subscribe agent(%d) reader(%s)", agent, reader)
 	subscribe (agent, reader)
 	return create_reader ()
 end
 
 function CMD.aoi_unsubscribe (agent)
-	syslog.debugf ("aoi_unsubscribe agent(%d)", agent)
+	log ("aoi_unsubscribe agent(%d)", agent)
 	local t = subscribe_agent[agent]
 	if t then
 		local id = t.character.id
 		subscribe_agent[agent] = nil
 		subscribe_character[id] = nil
-		user.send_request ("aoi_remove", { character = id })
+		client.request (user, "aoi_remove", { character = id })
 	end
 end
 
@@ -198,7 +194,7 @@ function CMD.aoi_send (agent, scope)
 	refresh_aoi (id, scope)
 end
 
-function RESPONSE.aoi_add (request, response)
+function RESPONSE:aoi_add (request, response)
 	if not response or not response.wantmore then return end
 
 	local id = request.character.id
@@ -208,12 +204,12 @@ function RESPONSE.aoi_add (request, response)
 	end
 end
 
-function RESPONSE.aoi_update_move (request, response)
+function RESPONSE:aoi_update_move (request, response)
 	if not response or not response.wantmore then return end
 	aoi_update_response (request.character.id, "move")
 end
 
-function RESPONSE.aoi_update_attribute (request, response)
+function RESPONSE:aoi_update_attribute (request, response)
 	if not response or not response.wantmore then return end
 	aoi_update_response (request.character.id, "attribute")
 end

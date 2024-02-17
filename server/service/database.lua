@@ -1,11 +1,12 @@
 local skynet = require "skynet"
 local redis = require "skynet.db.redis"
 
+local log = require "log"
+
 local config = require "config.database"
 local account = require "db.account"
 local character = require "db.character"
 
-local center
 local group = {}
 local ngroup
 
@@ -66,7 +67,7 @@ skynet.start (function ()
 		local function ret (ok, ...)
 			if not ok then
 				local strerr = tostring(...)
-				skynet.error("call db handle error : " .. strerr)
+				log ("call db handle error : " .. strerr)
 				skynet.ret ()
 			else
 				skynet.retpack (...)

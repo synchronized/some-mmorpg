@@ -1,11 +1,14 @@
 local skynet = require "skynet"
 local sharedata = require "skynet.sharedata"
 
-local syslog = require "syslog"
+local log = require "log"
+
 local dbpacker = require "db.packer"
 local cjsonutil = require "cjson.util"
-local handler = require "agent.handler"
 local uuid = require "uuid"
+local errcode = require "proto.errcode"
+
+local handler = require "agent.handler"
 
 local REQUEST = {}
 handler = handler.new (REQUEST)
@@ -13,11 +16,16 @@ handler = handler.new (REQUEST)
 local user
 local database
 local gdd
+local world
+
+skynet.init(function () 
+	database = skynet.uniqueservice ("database")
+	gdd = sharedata.query ("gdd")
+	world = skynet.uniqueservice ("world")
+end)
 
 handler:init (function (u)
 	user = u
-	database = skynet.uniqueservice ("database")
-	gdd = sharedata.query "gdd"
 end)
 
 local function load_list (account_id)
@@ -38,33 +46,31 @@ local function check_character (account_id, character_id)
 	return false
 end
 
-function REQUEST.character_list ()
-	local char_list = load_list (user.account_id)
-	skynet.error("<character_list> account_id: "..tostring(user.account_id)..", char_list: "..cjsonutil.serialise_value(char_list))
-	local character = {}
-	for _, character_id in pairs (char_list) do
-		local c = skynet.call (database, "lua", "character", "load", character_id)
-		if c then
-			character[character_id] = dbpacker.unpack (c)
-		end
+local function create (name, race, class)
+	if not name then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_NAME, } end	
+	if not race then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_RACE, } end
+	if not class then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_CLASS, } end
+	if #name <= 2 or #name > 24 then
+		log (string.format("invalid character name: %s", name))
+		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_NAME, }
+	end
+	if not gdd.race[race] then
+		log (string.format("invalid character race: %s", race))
+		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_RACE, }
+	end
+	if not gdd.class[class] then
+		log (string.format("invalid character class: %s", class))
+		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_CLASS, }
 	end
 
-	skynet.error("    character-list: "..cjsonutil.serialise_value(character))
-	return { character = character }
-end
-
-local function create (name, race, class)
-	assert (name and race and class, "invalid name or race, class")
-	assert (#name > 2 and #name < 24, string.format("invalid name: %s", name))
-	assert (gdd.class[class], string.format("invalid class: %s", class))
-	local r = assert(gdd.race[race], string.format("invalid race: %s", race))
+	local race_info = gdd.race[race]
 
 	local character = {
 		general = {
 			name = name,
 			race = race,
 			class = class,
-			map = r.home,
+			map = race_info.home,
 		}, 
 		attribute = {
 			level = math.tointeger(1),
@@ -72,62 +78,18 @@ local function create (name, race, class)
 		},
 		movement = {
 			mode = 0,
-			pos = { x = r.pos_x, y = r.pos_y, z = r.pos_z, o = r.pos_o },
+			pos = { 
+				x = race_info.pos_x,
+				y = race_info.pos_y,
+				z = race_info.pos_z,
+				o = race_info.pos_o,
+			 },
 		},
 	}
-	return character
+	return nil, character
 end
 
-function REQUEST.character_create (args)
-	assert(args, "invalid request")
-	local char_req = assert(args.character, "invalid request character")
-
-	skynet.error("<character_create> args: "..cjsonutil.serialise_value(char_req, "  "))
-
-	local character = create(char_req.name, char_req.race, char_req.class)
-	local character_id = skynet.call(database, "lua", "character", "reserve", tostring(uuid.gen()), char_req.name)
-	if not character_id then
-		skynet.error(string.format("    character_name: %s already exist", character.z.name))
-		return {}
-	end
-
-	character.id = character_id
-	local json = dbpacker.pack (character)
-	if not skynet.call(database, "lua", "character", "save", character_id, json) then
-		skynet.error(string.format("    character_id: %d save failed data: %s", character_id, json))	
-	end
-
-	local list = load_list (user.account_id)
-	table.insert (list, character_id)
-	json = dbpacker.pack (list)
-	
-	if not skynet.call(database, "lua", "character", "savelist", user.account_id, json) then
-		skynet.error(string.format("    account_id: %d save failed char_list: %s", user.account_id, json))
-	end
-
-	skynet.error("    new character_info: "..cjsonutil.serialise_value(character, "      "))
-	return { character = character }
-end
-
-function REQUEST.character_pick (args)
-	assert(args, "invalid request")
-	local character_id = assert(args.id, string.format("invalid request character_id"))
-	assert(check_character (user.account_id, character_id), string.format("invalidid character_id: %d", character_id))
-
-	skynet.error("<character_pick> args: "..cjsonutil.serialise_value(args, "  "))
-
-	local c = assert(skynet.call(database, "lua", "character", "load", character_id), 
-		string.format("character_id: %d load failed", character_id))
-	local character = dbpacker.unpack (c)
-	user.character = character
-
-	local world = skynet.uniqueservice ("world")
-	skynet.call (world, "lua", "character_enter", character_id)
-
-	return { character = character }
-end
-
-function handler.on_enter_world (character)
+local function on_enter_world (character)
 	local temp_attribute = {
 		[1] = {},
 		[2] = {},
@@ -172,6 +134,113 @@ function handler.on_enter_world (character)
 	end
 end
 
+function REQUEST:character_list ()
+	local char_list = load_list (user.account_id)
+	log ("<character_list> account_id: "..tostring(user.account_id)..", char_list: "..cjsonutil.serialise_value(char_list, "  "))
+	local character = {}
+	for _, character_id in pairs (char_list) do
+		local c = skynet.call (database, "lua", "character", "load", character_id)
+		if c then
+			character[character_id] = dbpacker.unpack (c)
+		end
+	end
+
+	log ("    character-list: "..cjsonutil.serialise_value(character, "  "))
+	return nil, { character = character }
+end
+
+function REQUEST:character_create (args)
+	if not args then
+		return { error_code = errcode.COMMON_INVALID_REQUEST_PARMS }
+	end
+	if not args.character then
+		return { error_code = errcode.COMMON_INVALID_REQUEST_PARMS }
+	end
+	local char_req = args.character
+
+	log ("<character_create> args: "..cjsonutil.serialise_value(char_req, "  "))
+
+	local ret, character = create(char_req.name, char_req.race, char_req.class)
+	if ret then
+		return ret -- 创建角色失败
+	end
+
+	local char_name = char_req.name
+	local character_id = skynet.call(database, "lua", "character", "reserve", uuid.gen(), char_name)
+	if not character_id then
+		log ("    character_name: %s already exist", char_name)
+		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_ID }
+	end
+
+	character.id = character_id
+	local json = dbpacker.pack (character)
+	if not skynet.call(database, "lua", "character", "save", character_id, json) then
+		log ("    character_id: %d save failed data: %s", character_id, json)
+		return { error_code = errcode.CHARACTER_SAVE_DATA_FAILED }
+	end
+
+	local list = load_list (user.account_id)
+	table.insert (list, character_id)
+	json = dbpacker.pack (list)
+	
+	if not skynet.call(database, "lua", "character", "savelist", user.account_id, json) then
+		log ("    account_id: %d save failed char_list: %s", user.account_id, json)
+		return { error_code = errcode.CHARACTER_SAVE_DATA_FAILED }
+	end
+
+	return nil, { character = character }
+end
+
+function REQUEST:character_pick (args)
+	if not args then
+		return { error_code = errcode.COMMON_INVALID_REQUEST_PARMS }
+	end
+	if not args.id then
+		log ("invalid character_id: %d", tonumber(args.id))
+		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_ID }
+	end
+	local character_id = args.id
+	if not check_character (user.account_id, character_id) then
+		log ("invalid character_id: %d", character_id)
+		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_ID }
+	end
+
+	log ("<character_pick> args: "..cjsonutil.serialise_value(args, "  "))
+
+	if user.character then
+ 		log ("    current character_id: %d", user.character.id)
+		-- 已经选择过角色, 如果是当前角色直接返回
+		if user.character.id == character_id then
+			return nil, { character = user.character }
+		end
+
+		-- 如果不是当前角色先将之前的角色离开地图
+ 		log ("    character_id: %d leave world", user.character.id)
+		if user.map then
+			skynet.call(user.map, "lua", "character_leave", user.character.id)
+		end
+
+		if user.world then
+			skynet.call(user.world, "lua", "character_leave", user.character.id)
+		end
+	end
+
+	local c = skynet.call(database, "lua", "character", "load", character_id)
+	if not c then
+		log ("character_id: %d load failed", character_id)
+		return { error_code = errcode.CHARACTER_LOAD_DATA_FAILED }
+	end	
+	local character = dbpacker.unpack (c)
+	user.character = character
+
+	on_enter_world(user.character)
+	local map = user.character.general.map
+	local pos =  user.character.movement.pos
+	skynet.call (world, "lua", "character_enter", character_id, map, pos)
+
+	return nil, { character = character }
+end
+
 function handler.save (character)
 	if not character then return end
 
@@ -183,4 +252,3 @@ function handler.save (character)
 end
 
 return handler
-

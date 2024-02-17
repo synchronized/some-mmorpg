@@ -10,4 +10,12 @@ function log.printf(fmt, ...)
 	skynet.error(string.format(fmt, ...))
 end
 
-return log
+function log.__call(self, ...)
+	if select("#", ...) == 1 then
+		self.print(...)
+	else
+		self.printf(...)
+	end
+end
+
+return setmetatable(log, log)

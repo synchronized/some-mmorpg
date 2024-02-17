@@ -1,5 +1,4 @@
 local sprotoloader = require "sprotoloader"
-local cjsonutil = require "cjson.util"
 
 local loader = {
 	LOGIN = math.tointeger(1),
