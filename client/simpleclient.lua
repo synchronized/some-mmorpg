@@ -21,8 +21,6 @@ local protoloader = require "protoloader"
 local srp = require "srp"
 local aes = require "aes"
 local cjsonutil = require "cjson.util"
-local lsocket = require "lsocket"
-local tableext = require "somemmo.tableext"
 
 protoloader.init()
 
@@ -62,15 +60,15 @@ function event:handshake (req, resp, ret)
 	if resp.user_exists then
 		local key = srp.create_client_session_key (username, user.password, resp.salt, user.private_key, user.public_key, resp.server_pub)
 		user.session_key = key
-		local ret = { 
+		local ret = {
 			challenge = aes.encrypt (resp.challenge, key),
 		}
 		message.request ("auth", ret)
 	else
 		local key = srp.create_client_session_key (username, user.password, resp.salt, user.private_key, user.public_key, resp.server_pub)
 		user.session_key = key
-		local ret = { 
-			challenge = aes.encrypt (resp.challenge, key), 
+		local ret = {
+			challenge = aes.encrypt (resp.challenge, key),
 			password = aes.encrypt (user.password, key),
 		}
 		message.request ("auth", ret)
@@ -83,12 +81,10 @@ function event:auth (req, resp, ret)
 		return
 	end
 
-	local username = user.username
-
 	user.login_session = resp.login_session
 	local challenge = aes.encrypt (resp.challenge, user.session_key)
-	message.request ("challenge", { 
-		login_session = resp.login_session, 
+	message.request ("challenge", {
+		login_session = resp.login_session,
 		challenge = challenge,
 	})
 end

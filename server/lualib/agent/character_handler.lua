@@ -6,7 +6,7 @@ local log = require "log"
 local dbpacker = require "db.packer"
 local cjsonutil = require "cjson.util"
 local uuid = require "uuid"
-local errcode = require "proto.errcode"
+local errcode = require "errcode.errcode"
 
 local handler = require "agent.handler"
 
@@ -18,7 +18,7 @@ local database
 local gdd
 local world
 
-skynet.init(function () 
+skynet.init(function ()
 	database = skynet.uniqueservice ("database")
 	gdd = sharedata.query ("gdd")
 	world = skynet.uniqueservice ("world")
@@ -47,7 +47,7 @@ local function check_character (account_id, character_id)
 end
 
 local function create (name, race, class)
-	if not name then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_NAME, } end	
+	if not name then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_NAME, } end
 	if not race then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_RACE, } end
 	if not class then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_CLASS, } end
 	if #name <= 2 or #name > 24 then
@@ -71,14 +71,14 @@ local function create (name, race, class)
 			race = race,
 			class = class,
 			map = race_info.home,
-		}, 
+		},
 		attribute = {
 			level = math.tointeger(1),
 			exp = 0,
 		},
 		movement = {
 			mode = 0,
-			pos = { 
+			pos = {
 				x = race_info.pos_x,
 				y = race_info.pos_y,
 				z = race_info.pos_z,
@@ -105,15 +105,15 @@ local function on_enter_world (character)
 	local race = character.general.race
 	local level = math.tointeger(character.attribute.level)
 
-	
+
 	local gda = gdd.attribute
-	
+
 	local base = temp_attribute[1]
 	base.health_max = gda.health_max[class][level]
 	base.strength = gda.strength[race][level]
 	base.stamina = gda.stamina[race][level]
 	base.attack_power = 0
-	
+
 	local last = temp_attribute[attribute_count - 1]
 	local final = temp_attribute[attribute_count]
 
@@ -182,7 +182,7 @@ function REQUEST:character_create (args)
 	local list = load_list (user.account_id)
 	table.insert (list, character_id)
 	json = dbpacker.pack (list)
-	
+
 	if not skynet.call(database, "lua", "character", "savelist", user.account_id, json) then
 		log ("    account_id: %d save failed char_list: %s", user.account_id, json)
 		return { error_code = errcode.CHARACTER_SAVE_DATA_FAILED }
@@ -229,7 +229,7 @@ function REQUEST:character_pick (args)
 	if not c then
 		log ("character_id: %d load failed", character_id)
 		return { error_code = errcode.CHARACTER_LOAD_DATA_FAILED }
-	end	
+	end
 	local character = dbpacker.unpack (c)
 	user.character = character
 

@@ -9,13 +9,10 @@ local service = require "service"
 local client = require "client"
 local log = require "log"
 
-local errcode = require "proto.errcode"
-
-local traceback = debug.traceback
+local errcode = require "errcode.errcode"
 
 local mainserver
 local database
-local host
 local auth_timeout
 local session_expire_time
 local session_expire_time_in_second
@@ -39,7 +36,7 @@ end
 
 local empty_response = {}
 
-local function reterrcode(fd, response, error_code) 
+local function reterrcode(fd, response, error_code)
 	send_msg (fd, response( empty_response, { error_code = error_code, }))
 end
 
@@ -98,7 +95,7 @@ local function auth (fd, addr)
 
 		local session_key, _, pkey = srp.create_server_session_key (account.verifier, args.client_pub)
 		local challenge = srp.random ()
-		
+
 		send_msg (fd, response( {
 			user_exists = (account.account_id ~= nil),
 			salt = account.salt,
@@ -149,7 +146,7 @@ local function auth (fd, addr)
 		else
 			log ("    account username: %s account_id: %d login", username, account_id)
 		end
-		
+
 		challenge = srp.random ()
 		local login_session = skynet.call (mainserver, "lua", "save_session", account_id, session_key, challenge)
 
@@ -161,7 +158,7 @@ local function auth (fd, addr)
 			expire = session_expire_time_in_second,
 			challenge = challenge,
 		}))
-		
+
 		ok, type, name, args, response = read_msg (fd)
 		if not ok then
 			log ("read message failed err: %s", tostring(type))
@@ -210,7 +207,7 @@ end
 function loginwork.auth(fd, addr)
 	local account_id = auth(fd, addr)
 	if not account_id then
-		close(fd)	
+		close(fd)
 		return
 	end
 	return account_id
@@ -221,7 +218,7 @@ function loginwork.save_session (login_session, account_id, session_key, challen
 	log ("    account account_id: %d, login_session: %d savesession ",
 		account_id, login_session)
 
-	saved_session[login_session] = { 
+	saved_session[login_session] = {
 		account_id = account_id,
 		key = session_key,
 		challenge = challenge,
@@ -264,7 +261,7 @@ function loginwork.verify (login_session, secret)
 	end
 
 	local text = aes.decrypt (secret, t.key) or error (string.format("login_session: %d secret decrypt failed", login_session))
-	assert (text == t.token, 
+	assert (text == t.token,
 		string.format("account login_session: %d verify token failed", login_session))
 	t.token = nil
 

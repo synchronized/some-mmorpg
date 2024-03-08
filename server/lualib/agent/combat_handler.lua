@@ -1,10 +1,9 @@
 local skynet = require "skynet"
 
-local errcode = require "proto.errcode"
+local errcode = require "errcode.errcode"
 
 local handler = require "agent.handler"
 local aoi_handler = require "agent.aoi_handler"
-
 
 local REQUEST = {}
 local CMD = {}
@@ -31,7 +30,7 @@ function REQUEST:combat (args)
 	end
 
 	local damage = user.character.attribute.attack_power
-	damage = skynet.call (agent, "lua", "combat_melee_damage", user.character.id, damage) 
+	damage = skynet.call (agent, "lua", "combat_melee_damage", user.character.id, damage)
 
 	return nil, { target = tid, damage = damage }
 end

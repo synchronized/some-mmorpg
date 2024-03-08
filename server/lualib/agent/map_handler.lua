@@ -1,5 +1,5 @@
 local skynet = require "skynet"
-local errcode= require "proto.errcode"
+local errcode= require "errcode.errcode"
 
 local handler = require "agent.handler"
 
@@ -37,8 +37,8 @@ function REQUEST:move (args)
 		end
 	end
 	user.character.movement.pos = npos
-	
-	local ok = skynet.call (user.map, "lua", "move_blink", npos) 
+
+	local ok = skynet.call (user.map, "lua", "move_blink", npos)
 	if not ok then
 		user.character.movement.pos = opos
 		log ("move failed ")

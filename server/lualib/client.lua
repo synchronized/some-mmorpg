@@ -1,5 +1,5 @@
 local skynet = require "skynet"
-local errcode= require "proto.errcode"
+local errcode= require "errcode.errcode"
 
 local proxy = require "socket_proxy"
 local protoloader = require "protoloader"
@@ -57,7 +57,7 @@ function client.dispatch( c )
 						log.printf("<error> response error = %s", result)
 						if fnresponse then
 							proxy.write(fd, fnresponse(emptytable, {
-								ok = false, 
+								ok = false,
 								error_code = errcode.COMMON_SERVER_ERROR,
 							}))
 						end
