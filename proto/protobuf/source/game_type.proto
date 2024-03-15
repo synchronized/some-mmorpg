@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package proto;
+
+message attr_general {
+    string name = 1;          // 名称
+    string race = 2;          // 种族
+    string class = 3;         // 职业
+    string map = 4;           // 地图
+}
+
+message position {
+    int32 x = 1;              //
+    int32 y = 2;              //
+    int32 z = 3;              //
+    int32 o = 4;              //
+}
+
+message movement {
+    position pos = 1;         //位置
+}
+
+message attribute {
+    int32 health = 1;         // 生命值
+    int32 level = 2;          // 等级
+    int32 exp = 3;            // 经验
+    int32 health_max = 4;     // 生命上限
+	int32 strength = 5;       // 体制
+    int32 stamina = 6;        // 耐力
+    int32 attack_power = 7;   // 攻击力
+}
+
+message attribute_overview {
+    int32 level = 1;          //等级
+}
+
+message attribute_aoi {
+    int32 level = 1;          //等级
+    int32 health = 2;         //生命值
+    int32 health_max = 3;     //生命上限
+}
+
+message character {
+    int32 id = 1;             //角色id
+    attr_general general = 2; //通用属性
+    attribute attribute = 3;  //属性
+    movement movement = 4;    //位置信息
+}
+
+message character_agent {
+    int32 id = 1;             // 角色id
+    attr_general general = 2; // 通用属性
+    attribute attribute = 3;  // 属性
+    movement movement = 4;    // 位置信息
+}
+
+message character_overview {
+    int32 id = 1;                       //角色id
+    attr_general general = 2;           // 通用属性
+	attribute_overview attribute = 3;   //覆盖属性
+}
+
+message character_aoi {
+    int32 id = 1;                       // 角色id
+    attr_general general = 2;           // 通用属性
+    attribute_aoi attribute = 3;        // aoi属性
+    movement movement = 4;              // 位置信息
+}
+
+message character_aoi_move {
+    int32 id = 1;                       // 角色id
+    movement movement = 2;              // 位置信息
+}
+
+message character_aoi_attribute {
+    int32 id = 1;                       // 角色id
+    attribute_aoi attribute = 2;        // aoi属性
+}
+

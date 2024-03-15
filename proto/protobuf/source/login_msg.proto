@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package proto;
+
+//服务器下发确认号
+message res_acknowledgment {
+	string acknumber  = 1;     // Acknowledgment Number
+}
+
+//客户端请求客户端密钥
+message req_handshake {
+	string client_pub = 1; // 客户端公钥
+}
+message res_handshake {
+	string secret = 1; // 后面服务器和客户端通讯的密钥
+}
+
+//客户端提交加密后的确认号
+message req_challenge {
+	string hmac = 1; // 加密后的确认号
+}
+
+//登陆验证
+message req_auth {
+	string username = 1; // 用户名
+	string password = 2; // 密码
+}
+message res_auth {
+	int32 login_session = 1; // 登陆session号
+	int32 expire = 2; // 过期时间(妙)
+	string token = 3; // token,后面可以用login_session + token 登陆
+}

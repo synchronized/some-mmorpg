@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package proto;
+
+import "game_type.proto";
+
+message req_ping {
+}
+message res_ping {
+}
+
+message req_login {
+	int32 login_session = 1; // login session id
+	string token = 2;        // encryped token
+}
+message res_login {
+	bool success = 1; // login success
+}
+
+message res_character_list {
+	map<int64, character_overview> character = 1;
+}
+
+message req_character_create {
+	attr_general character = 1; //角色属性
+}
+
+message res_character_create {
+	character_overview character = 1; //
+}
+
+message req_character_pick {
+	int64 id = 1; //角色id
+}
+message res_character_pick {
+	character character = 1; //角色信息
+}
+
+message req_move {
+	position pos = 1; //位置信息
+}
+message res_move {
+	position pos = 1; //位置信息
+}
+
+message req_combat {
+	int32 target = 1; //攻击目标
+}
+message res_combat {
+	int32 target = 1; //目标
+	int32 damage = 2; //伤害
+}
+
+
+message res_aoi_add {
+	character_aoi icharacter = 1; //aoi信息
+}
+message req_aoi_add {
+	bool wantmore = 1; //
+}
+
+message res_aoi_remove {
+	int32 character = 1; //
+}
+
+message res_aoi_update_move {
+	character_aoi_move character = 1; //
+}
+message req_aoi_update_move {
+	bool wantmore = 1; //
+}
+
+message res_aoi_update_attribute {
+	character_aoi_attribute character = 1; //
+}
+message req_aoi_update_attribute {
+	bool wantmore = 1; //
+}
