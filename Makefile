@@ -8,9 +8,6 @@ LUA_ROOT ?= $(SKYNET_ROOT)/3rd/lua
 CJSON_ROOT ?= $(THIRD_LIB_ROOT)/lua-cjson
 CJSON_INC ?= ../skynet/3rd/lua
 
-OPENSSL_ROOT ?= $(THIRD_LIB_ROOT)/openssl
-OPENSSL_FLAG ?= -I$(OPENSSL_ROOT)/include -L$(OPENSSL_ROOT) -lcrypto
-
 LSOCKET_ROOT ?= $(THIRD_LIB_ROOT)/lsocket
 LSOCKET_INC ?= ../skynet/3rd/lua
 
@@ -74,15 +71,8 @@ $(CLIENT_LUA_CLIB_PATH)/lsocket.so : | $(CLIENT_LUA_CLIB_PATH)
 $(SERVER_CSERVICE_PATH)/package.so : $(SERVER_ROOT)/service-src/service_package.c | $(SERVER_CSERVICE_PATH)
 	$(CC) $(CUSTOM_CFLAGS) $(SHARED) $< -o $@ -I$(SKYNET_ROOT)/skynet-src
 
-$(SERVER_LUA_CLIB_PATH)/srp.so : $(SERVER_ROOT)/lualib-src/lua-srp.c | $(SERVER_LUA_CLIB_PATH)
-	$(CC) $(CUSTOM_CFLAGS) $(SHARED) $^ $(OPENSSL_FLAG) -o $@
-
-$(SERVER_LUA_CLIB_PATH)/aes.so : $(SERVER_ROOT)/lualib-src/lua-aes.c | $(SERVER_LUA_CLIB_PATH)
-	$(CC) $(CUSTOM_CFLAGS) $(SHARED) $^ $(OPENSSL_FLAG) -o $@
-
 $(SERVER_LUA_CLIB_PATH)/uuid.so : $(SERVER_ROOT)/lualib-src/lua-uuid.c | $(SERVER_LUA_CLIB_PATH)
-	$(CC) $(CUSTOM_CFLAGS) $(SHARED) $^ $(OPENSSL_FLAG) -o $@
-
+	$(CC) $(CUSTOM_CFLAGS) $(SHARED) $^ -o $@
 
 clean :
 	rm -f $(COMMON_LUA_CLIB_PATH)/*.so $(SERVER_LUA_CLIB_PATH)/*.so $(SERVER_CSERVICE_PATH)/*.so $(CLIENT_LUA_CLIB_PATH)/*.so

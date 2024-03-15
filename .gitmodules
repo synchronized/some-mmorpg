@@ -6,10 +6,6 @@
 	path = 3rd/redis
 	url = git@github.com:antirez/redis.git
 	branch = 2.8
-[submodule "3rd/openssl"]
-	path = 3rd/openssl
-	url = git@github.com:openssl/openssl.git
-	branch = 1.0.2-aead
 [submodule "3rd/lua-cjson"]
 	path = 3rd/lua-cjson
 	url = https://github.com/cloudwu/lua-cjson.git
