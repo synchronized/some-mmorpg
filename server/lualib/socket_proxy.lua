@@ -50,7 +50,8 @@ end
 
 function proxy.close(fd)
 	if map[fd] then
-		skynet.send(get_addr(fd), "text", "K") end
+		skynet.send(get_addr(fd), "text", "K")
+	end
 end
 
 function proxy.info(fd)
@@ -58,6 +59,3 @@ function proxy.info(fd)
 end
 
 return proxy
-
-
-

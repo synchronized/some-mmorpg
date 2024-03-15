@@ -1,0 +1,66 @@
+
+ping 0 {
+    request {
+    }
+    response {}
+}
+
+login 1 {
+    request {
+        login_session 0 : integer      # login session id
+        token 1 : string               # encryped token
+    }
+    response {
+        success 0 : boolean            # login success
+    }
+}
+
+character_list 2 {
+    response {
+        character 0 : *character_overview(id)
+    }
+}
+
+character_create 3 {
+    request {
+        character 0 : general
+    }
+
+    response {
+        character 0 : character_overview
+        errno 1 : integer
+    }
+}
+
+character_pick 4 {
+    request {
+        id 0 : integer
+    }
+
+    response {
+        character 0 : character
+        errno 1 : integer
+    }
+}
+
+map_ready 100 {
+}
+
+move 200 {
+    request {
+        pos 0 : position
+    }
+    response {
+        pos 0 : position
+    }
+}
+
+combat 400 {
+    request {
+        target 0 : integer
+    }
+    response {
+        target 0 : integer
+        damage 1 : integer
+    }
+}

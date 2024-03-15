@@ -1,0 +1,29 @@
+
+handshake 1 {
+    request {
+        client_pub 0 : string           # 客户端公钥
+    }
+    response {
+        secret 0 : string               # 后面服务器和客户端通讯的密钥
+    }
+}
+
+challenge 2 {
+    request {
+        hmac 0 : string                 # 加密后的确认号
+    }
+    response {
+    }
+}
+
+auth 3 {
+    request {
+        username 0 : string           # 用户名
+        password 1 : string           # 密码
+    }
+    response {
+        login_session 1 : integer      # 登陆session号
+        expire 2 : integer             # 过期时间(妙)
+        token 3 : string               # token,后面可以用login_session + token 登陆
+    }
+}

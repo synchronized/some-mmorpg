@@ -29,9 +29,17 @@ function client.readmessage( fd )
 end
 
 function client.writemessage( fd, msg, sz )
-	proxy.write(fd,  msg, sz)
+	proxy.write(fd, msg, sz)
 end
 
+function client.read( fd )
+	proxy.subscribe(fd)
+	return skynet.tostring(proxy.read(fd))
+end
+
+function client.write( fd, luastring)
+	proxy.write(fd, skynet.pack(luastring))
+end
 
 local emptytable = {}
 function client.dispatch( c )
@@ -95,6 +103,7 @@ end
 
 -- 向客户端推送消息
 function client.push(c, t, data)
+	proxy.subscribe(c.fd)
 	proxy.write(c.fd, sender(t, data))
 end
 

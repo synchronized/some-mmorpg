@@ -50,14 +50,9 @@ end
 function loginserver.save_session (account_id, session_key, challenge)
 	local login_session = getnextlogin_session()
 
-	s = works[(login_session % data.nwork) + 1]
+	local s = works[(login_session % data.nwork) + 1]
 	skynet.call (s, "lua", "save_session", login_session, account_id, session_key, challenge)
 	return login_session
-end
-
-function loginserver.challenge (login_session, challenge)
-	s = works[(login_session % data.nwork) + 1]
-	return skynet.call (s, "lua", "challenge", login_session, challenge)
 end
 
 function loginserver.verify (login_session, token)

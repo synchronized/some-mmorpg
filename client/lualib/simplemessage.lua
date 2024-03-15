@@ -1,5 +1,4 @@
 local socket = require "simplesocket"
-local sproto = require "sproto"
 local protoloader = require "protoloader"
 
 local cjsonutil = require "cjson.util"
@@ -38,13 +37,21 @@ function message.bind(obj, handler)
 	var.object[obj] = handler
 end
 
+function message.read(ti)
+  return socket.read(ti)
+end
+
+function message.write(msg)
+  socket.write(msg)
+end
+
 function message.request(name, args)
 	var.session_id = var.session_id + 1
 	var.session[var.session_id] = { name = name, req = args }
 	socket.write(var.request(name , args, var.session_id))
 
 	if name ~= "ping" then
-		print(string.format("==> REQUEST %s(%d) data: %s", 
+		print(string.format("==> REQUEST %s(%d) data: %s",
 			name, var.session_id, cjsonutil.serialise_value(args)))
 	end
 	return var.session_id
@@ -57,6 +64,10 @@ function message.dispatch_message(ti)
 	end
 	local t, session_id, resp, ret = var.host:dispatch(msg)
 	if t == "REQUEST" then
+		if session_id ~= "ping" then
+			print(string.format("<== REQUEST %s data: %s", session_id, cjsonutil.serialise_value(resp)))
+		end
+
 		for obj, handler in pairs(var.object) do
 			local f = handler[session_id]	-- session_id is request type
 			if f then
@@ -70,9 +81,9 @@ function message.dispatch_message(ti)
 		local session = var.session[session_id]
 		var.session[session_id] = nil
 		if session.name ~= "ping" then
-			print(string.format("<== RESPONSE %s(%d) ret: %s data: %s", 
-				session.name, session_id, 
-				cjsonutil.serialise_value(ret), cjsonutil.serialise_value(resp)))
+			print(string.format("<== RESPONSE %s(%d) ret: %s data: %s",
+								session.name, session_id,
+								cjsonutil.serialise_value(ret), cjsonutil.serialise_value(resp)))
 		end
 
 		for obj, handler in pairs(var.object) do

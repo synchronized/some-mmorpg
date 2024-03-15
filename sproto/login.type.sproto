@@ -1,0 +1,10 @@
+
+.result {
+    error_code 0 : integer             # error code
+}
+
+.package {
+    type 0 : integer
+    session 1 : integer
+    ud 2 : result
+}

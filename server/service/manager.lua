@@ -5,6 +5,8 @@ local client = require "client"
 local log = require "log"
 local protoloader = require "protoloader"
 
+local cjsonutil = require "cjson.util"
+
 local traceback = debug.traceback
 
 local manager = {}
@@ -32,8 +34,9 @@ end
 
 function manager.open(conf)
 	local selfaddr = skynet.self ()
-	local n = conf.agent_pool or 8
-	for i = 1, n do
+	local n = tonumber(conf.agent_pool or 8)
+	log ("manager.open agent pool size: %d", n)
+	for _ = 1, n do
 		table.insert (agent_pool, skynet.newservice ("agent", selfaddr))
 	end
 end

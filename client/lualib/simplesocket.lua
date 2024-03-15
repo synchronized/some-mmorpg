@@ -27,7 +27,7 @@ function socket.isconnect(ti)
 	if not fd then
 		return false
 	end
-	local rd, wt = lsocket.select(nil, { fd }, ti)
+	local _, wt = lsocket.select(nil, { fd }, ti)
 	local ok, errmsg = fd:status()
 	if not ok then
 		error(debug.traceback(errmsg, 3))
@@ -37,7 +37,7 @@ end
 
 function socket.close()
 	if fd then
-		fd:close()	
+		fd:close()
 	end
 	fd = nil
 	message = nil

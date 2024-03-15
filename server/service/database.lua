@@ -7,6 +7,7 @@ local config = require "config.database"
 local account = require "db.account"
 local character = require "db.character"
 
+local center
 local group = {}
 local ngroup
 
@@ -63,7 +64,7 @@ skynet.start (function ()
 		if not f then
 			error(string.format("Unknown module: %s command: %s", tostring(mod), tostring(cmd)))
 		end
-		
+
 		local function ret (ok, ...)
 			if not ok then
 				local strerr = tostring(...)

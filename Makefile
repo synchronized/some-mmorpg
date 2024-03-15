@@ -40,7 +40,7 @@ BIN_OBJECT =
 COMMON_LUA_CLIB = cjson
 
 # server
-SERVER_LUA_CLIB = srp aes uuid
+SERVER_LUA_CLIB = uuid
 SERVER_CSERVICE = package
 
 # client
@@ -51,7 +51,7 @@ all : \
   $(foreach v, $(COMMON_LUA_CLIB), $(COMMON_LUA_CLIB_PATH)/$(v).so) \
   $(foreach v, $(SERVER_LUA_CLIB), $(SERVER_LUA_CLIB_PATH)/$(v).so) \
   $(foreach v, $(SERVER_CSERVICE), $(SERVER_CSERVICE_PATH)/$(v).so) \
-  $(foreach v, $(CLIENT_LUA_CLIB), $(CLIENT_LUA_CLIB_PATH)/$(v).so) 
+  $(foreach v, $(CLIENT_LUA_CLIB), $(CLIENT_LUA_CLIB_PATH)/$(v).so)
 
 $(BIN_PATH) :
 	mkdir $(BIN_PATH)

@@ -48,9 +48,9 @@ function CMD.character_ready (agent, pos)
 	log ("character_id(%d) enter map", userdata.character_id)
 
 	local ok, list = aoi.insert (agent, pos)
-	if not ok then 
+	if not ok then
 		log ("<error> character_id(%d) join aoi manager failed", userdata.character_id)
-		return false 
+		return false
 	end
 
 	skynet.call (agent, "lua", "aoi_manage", list)
@@ -59,9 +59,9 @@ end
 
 function CMD.move_blink (agent, pos)
 	local ok, add, update, remove = aoi.update (agent, pos)
-	if not ok then 
+	if not ok then
 		log ("<error> aoi update failed")
-		return false 
+		return false
 	end
 	skynet.call (agent, "lua", "aoi_manage", add, remove, update, "move")
 	return true

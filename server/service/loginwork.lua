@@ -1,8 +1,7 @@
 local skynet = require "skynet"
+local crypt = require "skynet.crypt"
 
 local protoloader = require "protoloader"
-local srp = require "srp"
-local aes = require "aes"
 local uuid = require "uuid"
 
 local service = require "service"
@@ -40,6 +39,10 @@ local function reterrcode(fd, response, error_code)
 	send_msg (fd, response( empty_response, { error_code = error_code, }))
 end
 
+local function retdata(fd, response, resp)
+	send_msg (fd, response( resp))
+end
+
 local loginwork = {}
 
 -- call by loginserver
@@ -62,7 +65,59 @@ local function auth (fd, addr)
 		end
 	end)
 
-	local ok, type, name, args, response = read_msg (fd)
+	--- new
+	local user = {
+		fd = fd,
+	}
+
+	-- acknowledgment
+	local acknumber = crypt.randomkey()
+	client.push(user, "acknowledgment", {
+					acknumber = acknumber,
+	})
+
+	-- handshake
+	local ok, type, name, args, response = read_msg(fd)
+	if not ok then
+		log ("read message failed err: %s", tostring(type))
+		close()
+		return
+	end
+	if type ~= "REQUEST" then
+		log ("handler message type is not 'REQUEST' type:%s", tostring(type))
+		close()
+		return
+	end
+	if name ~= "handshake" then
+		log ("handler message name is not 'handshake' name:%s", tostring(name))
+		close()
+		return
+	end
+	if not args then
+		reterrcode(fd, response, errcode.COMMON_INVALID_REQUEST_PARMS) --请求参数有误
+		close()
+		return
+	end
+	if not args.client_pub then
+		reterrcode(fd, response, errcode.LOGIN_INVALID_CLIENT_PUB)
+		close()
+		return
+	end
+
+	local clientkey = args.client_pub
+	if #clientkey ~= 8 then
+		reterrcode(fd, response, errcode.LOGIN_INVALID_CLIENT_PUB)
+		close()
+		return
+	end
+	local serverkey = crypt.randomkey()
+	retdata(fd, response, {
+				secret = crypt.dhexchange(serverkey),
+	})
+	local secret = crypt.dhsecret(clientkey, serverkey)
+
+	-- challenge
+	ok, type, name, args, response = read_msg(fd)
 	if not ok then
 		log ("read message failed err: %s", tostring(type))
 		close()
@@ -70,138 +125,102 @@ local function auth (fd, addr)
 	end
 	if type ~= "REQUEST" then
 		log ("handler message type is not 'REQUEST'")
+		close()
 		return
 	end
-
-	if name == "handshake" then
-		-- handshake
-		if not args then
-			reterrcode(fd, response, errcode.COMMON_INVALID_REQUEST_PARMS) --请求参数有误
-			return
-		end
-		if not args.username then
-			reterrcode(fd, response, errcode.LOGIN_INVALID_USERNAME)
-			return
-		end
-		if not args.client_pub then
-			reterrcode(fd, response, errcode.LOGIN_INVALID_CLIENT_PUB)
-			return
-		end
-		local username = args.username
-		log ( "<login> handshake username: %s", username)
-
-		local account = assert(skynet.call (database, "lua", "account", "load", username),
-			string.format("load account username: %s failed", username))
-
-		local session_key, _, pkey = srp.create_server_session_key (account.verifier, args.client_pub)
-		local challenge = srp.random ()
-
-		send_msg (fd, response( {
-			user_exists = (account.account_id ~= nil),
-			salt = account.salt,
-			server_pub = pkey,
-			challenge = challenge,
-		}))
-
-		-- auth
-		ok, type, name, args, response = read_msg (fd)
-		if not ok then
-			log ("read message failed err: %s", tostring(type))
-			return
-		end
-		if type ~= "REQUEST" then
-			log ("handler message type is not 'REQUEST'")
-			return
-		end
-		if name ~= "auth" then
-			log ("handler message name is not 'auth'")
-			return
-		end
-		if not args then
-			reterrcode(fd, response, errcode.COMMON_INVALID_REQUEST_PARMS) --请求参数有误
-			return
-		end
-		if not args.challenge then
-			reterrcode(fd, response, errcode.LOGIN_INVALID_CHALLENGE) --challenge 有误
-			return
-		end
-
-		local text = aes.decrypt (args.challenge, session_key)
-		if challenge ~= text then
-			reterrcode(fd, response, errcode.LOGIN_CHALLENGE_VERIFY_FAILED) --challenge 验证失败
-			return
-		end
-
-		log ("<login> auth username: %s", username)
-
-		local account_id = tonumber (account.account_id)
-		if not account_id then
-			assert (args.password)
-			account_id = uuid.gen ()
-			local password = aes.decrypt (args.password, session_key)
-			account.account_id = assert(skynet.call (database, "lua", "account", "create", account_id, username, password),
-				string.format ("create account %s/%d failed", username, account_id))
-
-			log ("    account username: %s account_id: %d create", username, account_id)
-		else
-			log ("    account username: %s account_id: %d login", username, account_id)
-		end
-
-		challenge = srp.random ()
-		local login_session = skynet.call (mainserver, "lua", "save_session", account_id, session_key, challenge)
-
-		log ("    account username: %s account_id: %d login_session: %d",
-			username, account_id, login_session)
-
-		send_msg (fd, response ({
-			login_session = login_session,
-			expire = session_expire_time_in_second,
-			challenge = challenge,
-		}))
-
-		ok, type, name, args, response = read_msg (fd)
-		if not ok then
-			log ("read message failed err: %s", tostring(type))
-			return
-		end
-		if type ~= "REQUEST" then
-			log ("handler message type is not 'REQUEST'")
-			return
-		end
-	end
-
-	-- challenge
 	if name ~= "challenge" then
-		log ("handler message name is not 'auth'")
+		log ("handler message name is not 'handshake' name:%s", tostring(name))
+		close()
 		return
 	end
 	if not args then
 		reterrcode(fd, response, errcode.COMMON_INVALID_REQUEST_PARMS) --请求参数有误
+		close()
 		return
 	end
-	if not args.login_session then
-		reterrcode(fd, response, errcode.LOGIN_INVALID_SESSION_ID) -- session_id 有误
-		return
-	end
-	if not args.challenge then
-		reterrcode(fd, response, errcode.errcode.LOGIN_INVALID_CHALLENGE) --challenge 有误
-		return
-	end
-
-	local token, challenge = skynet.call (mainserver, "lua", "challenge", args.login_session, args.challenge)
-	if not token  or not challenge then
-		reterrcode(fd, response, errcode.LOGIN_SESSION_TIMEOUT) --会话超时
+	if not args.hmac then
+		reterrcode(fd, response, errcode.LOGIN_INVALID_HMAC)
+		close()
 		return
 	end
 
-	send_msg (fd, response ({
-		token = token,
-		challenge = challenge,
-	}))
+	local hmac = crypt.hmac64(acknumber, secret)
+	if hmac ~= args.hmac then
+		reterrcode(fd, response, errcode.LOGIN_INVALID_HMAC)
+		close()
+		return
+	end
+	retdata(fd, response, empty_response)
+
+	--auth
+	ok, type, name, args, response = read_msg(fd)
+	if not ok then
+		log ("read message failed err: %s", tostring(type))
+		close()
+		return
+	end
+	if type ~= "REQUEST" then
+		log ("handler message type is not 'REQUEST'")
+		close()
+		return
+	end
+	if name ~= "auth" then
+		log ("handler message name is not 'auth' name:%s", tostring(name))
+		close()
+		return
+	end
+	if not args then
+		reterrcode(fd, response, errcode.COMMON_INVALID_REQUEST_PARMS) --请求参数有误
+		close()
+		return
+	end
+	if not args.username then
+		reterrcode(fd, response, errcode.LOGIN_INVALID_USERNAME)
+		close()
+		return
+	end
+	if not args.password then
+		reterrcode(fd, response, errcode.LOGIN_INVALID_PASSWORD)
+		close()
+		return
+	end
+	local username = crypt.desdecode(secret, args.username)
+	local password = crypt.desdecode(secret, args.password)
+
+	log ("<login> auth username: %s, password: %d", username, password)
+
+	local account = assert(skynet.call (database, "lua", "account", "load", username),
+							string.format("load account username: %s failed", username))
+
+	local account_id = tonumber (account.account_id)
+
+	if not account_id then
+		account_id = uuid.gen ()
+		account.account_id = assert(skynet.call (database, "lua", "account", "create",
+													account_id, username, password),
+			string.format ("create account %s/%d failed", username, account_id))
+
+		log ("    account username: %s account_id: %d create", username, account_id)
+	else
+		if password ~= account.password then
+			reterrcode(fd, response, errcode.LOGIN_INVALID_USERNAME_OR_PASSWORD)
+			close()
+			return
+		end
+		log ("    account username: %s account_id: %d login", username, account_id)
+	end
+
+	local token = crypt.randomkey()
+	local login_session = skynet.call (mainserver, "lua", "save_session", account_id, clientkey, token)
+
+	retdata(fd, response, {
+				login_session = login_session,
+				expire = session_expire_time_in_second,
+				token = token,
+	})
 
 	connection[fd] = nil
-
-	return skynet.call (mainserver, "lua", "get_account_id", args.login_session)
+	return account_id
 end
 
 function loginwork.auth(fd, addr)
@@ -214,41 +233,23 @@ function loginwork.auth(fd, addr)
 end
 
 -- call by loginserver
-function loginwork.save_session (login_session, account_id, session_key, challenge)
+function loginwork.save_session (login_session, account_id, client_key, token)
 	log ("    account account_id: %d, login_session: %d savesession ",
 		account_id, login_session)
 
 	saved_session[login_session] = {
 		account_id = account_id,
-		key = session_key,
-		challenge = challenge,
+		key = client_key,
+		token = token,
 	}
 	skynet.timeout (session_expire_time, function ()
 		local t = saved_session[login_session]
 		if t then
-			if t and t.key == session_key then
+			if t and t.key == client_key then
 				saved_session[login_session] = nil
 			end
 		end
 	end)
-end
-
--- call by loginserver
-function loginwork.challenge (login_session, secret)
-	log ("    account login_session: %d verify challenge secret", login_session)
-
-	local t = saved_session[login_session]
-	if not t then
-		return
-	end
-
-	local text = aes.decrypt (secret, t.key) or error ()
-	assert (text == t.challenge)
-
-	t.token = srp.random ()
-	t.challenge = srp.random ()
-
-	return t.token, t.challenge
 end
 
 -- call by loginserver
@@ -260,7 +261,7 @@ function loginwork.verify (login_session, secret)
 		return
 	end
 
-	local text = aes.decrypt (secret, t.key) or error (string.format("login_session: %d secret decrypt failed", login_session))
+	local text = crypt.decrypt (t.key, secret) or error (string.format("login_session: %d secret decrypt failed", login_session))
 	assert (text == t.token,
 		string.format("account login_session: %d verify token failed", login_session))
 	t.token = nil

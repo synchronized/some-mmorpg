@@ -10,10 +10,6 @@ local map_handler = require "agent.map_handler"
 local aoi_handler = require "agent.aoi_handler"
 local combat_handler = require "agent.combat_handler"
 
-local cjsonutil = require "cjson.util"
-
-local traceback = debug.traceback
-
 --[[
 .user {
 	fd : integer
@@ -82,7 +78,7 @@ end
 function agent.assign (fd, account_id)
 	if user.fd then
 		error(string.format(
-			"agent repeat assign account_id: %d, new account_id: %d", 
+			"agent repeat assign account_id: %d, new account_id: %d",
 			user.account_id, account_id))
 	end
 
@@ -93,7 +89,7 @@ function agent.assign (fd, account_id)
 		user.exit = nil
 	else
 		user = {
-			fd = fd, 
+			fd = fd,
 			account_id = account_id,
 			REQUEST = {},
 			RESPONSE = {},
@@ -102,7 +98,7 @@ function agent.assign (fd, account_id)
 	end
 
 	agent.CMD = user.CMD
-	
+
 	character_handler:register(user)
 
 	last_heartbeat_time = skynet.now ()
@@ -114,7 +110,7 @@ end
 
 function agent.close()
 	log.printf ("agent closed account_id: %d", user.account_id)
-	
+
 	if user.account_id then
 		local account_id = user.account_id
 		if user.map then
@@ -139,7 +135,7 @@ function agent.kick ()
 end
 
 function agent.world_enter (world)
-	log ("agent character: %d(%s) world enter", 
+	log ("agent character: %d(%s) world enter",
 		user.character.id, user.character.general.name)
 
 	user.world = world
@@ -148,14 +144,14 @@ end
 
 function agent.world_leave (character_id)
 	if user.character and user.character.id == character_id then
-		log ("agent character: %d(%s) world leave", 
+		log ("agent character: %d(%s) world leave",
 			user.character.id, user.character.general.name)
 		user.world = nil
 	end
 end
 
 function agent.map_enter (map)
-	log ("agent character: %d(%s) map enter", 
+	log ("agent character: %d(%s) map enter",
 		user.character.id, user.character.general.name)
 
 	user.map = map
@@ -167,7 +163,7 @@ end
 
 function agent.map_leave (character_id)
 	if user.character and user.character.id == character_id then
-		log ("agent character: %d(%s) map leave", 
+		log ("agent character: %d(%s) map leave",
 			user.character.id, user.character.general.name)
 		user.map = nil
 		map_handler:unregister (user)

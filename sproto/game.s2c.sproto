@@ -1,0 +1,33 @@
+
+aoi_add 0 {
+    request {
+        character 0 : character_aoi
+    }
+    response {
+        wantmore 0 : boolean
+    }
+}
+
+aoi_remove 1 {
+    request {
+        character 0 : integer
+    }
+}
+
+aoi_update_move 2 {
+    request {
+        character 0 : character_aoi_move
+    }
+    response {
+        wantmore 0 : boolean
+    }
+}
+
+aoi_update_attribute 3 {
+    request {
+        character 0 : character_aoi_attribute
+    }
+    response {
+        wantmore 0 : boolean
+    }
+}
