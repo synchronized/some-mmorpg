@@ -17,21 +17,21 @@ local indexbyname = {}
 function loader.init ()
 	local index = 0
 	for protoid, protoname in ipairs(data) do
-		local ftype = io.open(string.format("sproto/%s.type.sproto", protoname), "r")
+		local ftype = io.open(string.format("proto/sproto/%s.type.sproto", protoname), "r")
 		local strtype = ""
 		if ftype then
 			strtype = ftype:read "a"
 			io.close(ftype)
 		end
 
-		local fc2s = io.open(string.format("sproto/%s.c2s.sproto", protoname), "r")
+		local fc2s = io.open(string.format("proto/sproto/%s.c2s.sproto", protoname), "r")
 		local strc2s = ""
 		if strc2s then
 			strc2s = fc2s:read "a"
 			io.close(fc2s)
 		end
 
-		local fs2c = io.open(string.format("sproto/%s.s2c.sproto", protoname), "r")
+		local fs2c = io.open(string.format("proto/sproto/%s.s2c.sproto", protoname), "r")
 		local strs2c = ""
 		if strs2c then
 			strs2c = fs2c:read "a"
