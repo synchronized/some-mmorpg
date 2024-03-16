@@ -53,6 +53,9 @@ all : \
 $(BIN_PATH) :
 	mkdir $(BIN_PATH)
 
+$(COMMON_LUA_CLIB_PATH) :
+	mkdir $(COMMON_LUA_CLIB_PATH)
+
 $(SERVER_CSERVICE_PATH) :
 	mkdir $(SERVER_CSERVICE_PATH)
 
