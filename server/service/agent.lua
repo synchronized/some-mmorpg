@@ -4,7 +4,7 @@ local service = require "service"
 local client = require "client"
 local log = require "log"
 
-local protoloader = require "protoloader"
+local protoloader = require "proto/sproto_mgr"
 local character_handler = require "agent.character_handler"
 local map_handler = require "agent.map_handler"
 local aoi_handler = require "agent.aoi_handler"
@@ -58,6 +58,7 @@ local agent = {
 local function new_user()
 	assert(user, string.format("invalid user data"))
 	local fd = user.fd
+	local account_id = user.account_id
 	local ok, error = pcall(client.dispatch, user)
 	log("fd=%d is gone. error = %s", fd, tostring(error))
 	client.close(fd)
@@ -69,7 +70,7 @@ local function new_user()
 			if not user.exit then
 				user.exit = true	-- mark exit
 				kick_agent()
-				log("user %s afk", user.account_id)
+				log("user %s afk", account_id)
 			end
 		end
 	end

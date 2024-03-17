@@ -1,6 +1,6 @@
 local skynet = require "skynet"
 
-local protoloader = require "protoloader"
+local protoloader = require "proto/sproto_mgr"
 
 protoloader.init ()
 

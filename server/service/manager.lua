@@ -1,9 +1,7 @@
 local skynet = require "skynet"
 
 local service = require "service"
-local client = require "client"
 local log = require "log"
-local protoloader = require "protoloader"
 
 local cjsonutil = require "cjson.util"
 
@@ -83,5 +81,4 @@ service.init {
 		"gdd",
 		"world"
 	},
-	init = client.init (protoloader.GAME),
 }

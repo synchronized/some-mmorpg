@@ -27,6 +27,7 @@ local function new_socket(fd, addr)
 	if not account_id then
 		log("Auth faild %d(%s)", fd, addr)
 		proxy.close(fd)
+		data.socket[fd] = nil
 		return
 	end
 	data.socket[fd] = account_id

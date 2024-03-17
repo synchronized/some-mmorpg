@@ -15,6 +15,7 @@ local errcode = {
 	LOGIN_INVALID_HMAC = 10007, -- hmac 有误
 	LOGIN_INVALID_PASSWORD = 10008, -- password 有误
 	LOGIN_INVALID_USERNAME_OR_PASSWORD = 10009, -- username 或者 password 有误
+	LOGIN_INVALID_HANDLE_TYPE = 10010, -- 请求协议有误
 
 	CHARACTER_INVLID_CHARACTER_ID = 20001, -- character_id 有误
 	CHARACTER_INVLID_CHARACTER_NAME = 20002, -- character name 有误
@@ -46,6 +47,7 @@ local errmsg = {
 	[errcode.LOGIN_INVALID_HMAC] = "hmac 有误",
 	[errcode.LOGIN_INVALID_PASSWORD] = "password 有误",
 	[errcode.LOGIN_INVALID_USERNAME_OR_PASSWORD] = "username 或者 password 有误",
+	[errcode.LOGIN_INVALID_HANDLE_TYPE] = "请求协议有误",
 
 	[errcode.CHARACTER_INVLID_CHARACTER_ID] = "character_id 有误",
 	[errcode.CHARACTER_INVLID_CHARACTER_NAME] = "character name 有误",

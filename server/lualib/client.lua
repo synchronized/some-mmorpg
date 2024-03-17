@@ -2,7 +2,7 @@ local skynet = require "skynet"
 local errcode= require "errcode.errcode"
 
 local proxy = require "socket_proxy"
-local protoloader = require "protoloader"
+local protoloader = require "proto/sproto_mgr"
 local log = require "log"
 
 local traceback = debug.traceback
@@ -45,13 +45,14 @@ local emptytable = {}
 function client.dispatch( c )
 	local fd = c.fd
 	proxy.subscribe(fd)
+	local co = coroutine.running()
 	while true do
 		local msg, sz = proxy.read(fd)
 		local type, session_id, args, fnresponse = host:dispatch(msg, sz)
+		if c.exit then
+			return c
+		end
 		if type == "REQUEST" then
-			if c.exit then
-				return c
-			end
 			local typename = session_id
 			local f = c.REQUEST and c.REQUEST[typename] or handler[typename] -- session_id is request type
 			if not f then
@@ -60,18 +61,23 @@ function client.dispatch( c )
 			else
 				-- f may block , so fork and run
 				skynet.fork(function()
-					local ok, result, resp = xpcall(f, traceback, c, args)
+					local ok, err, resp = xpcall(f, traceback, c, args)
+					log("=============typename: %s, ok:%s, err:%s, resp:%s", typename, tostring(ok), tostring(err), tostring(resp))
 					if not ok then
-						log.printf("<error> response error = %s", result)
+						log.printf("<error> response error = %s", err)
 						if fnresponse then
 							proxy.write(fd, fnresponse(emptytable, {
 								ok = false,
 								error_code = errcode.COMMON_SERVER_ERROR,
 							}))
 						end
+					elseif err ~= nil and err ~= errcode.SUCCESS  then
+						if fnresponse then
+							proxy.write(fd, fnresponse(resp or emptytable, {error_code = err}))
+						end
 					else
 						if fnresponse then
-							proxy.write(fd, fnresponse(resp or emptytable, result))
+							proxy.write(fd, fnresponse(resp or emptytable))
 						end
 					end
 				end)

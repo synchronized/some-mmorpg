@@ -1,8 +1,6 @@
 local skynet = require "skynet"
 
 local service = require "service"
-local client = require "client"
-local protoloader = require "protoloader"
 local log = require "log"
 
 local works = {}
@@ -68,5 +66,4 @@ end
 service.init {
 	command = loginserver,
 	info = users,
-	init = client.init (protoloader.LOGIN),
 }

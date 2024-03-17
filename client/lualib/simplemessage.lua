@@ -1,5 +1,5 @@
 local socket = require "simplesocket"
-local protoloader = require "protoloader"
+local protoloader = require "proto/sproto_mgr"
 
 local cjsonutil = require "cjson.util"
 
@@ -48,12 +48,14 @@ end
 function message.request(name, args)
 	var.session_id = var.session_id + 1
 	var.session[var.session_id] = { name = name, req = args }
-	socket.write(var.request(name , args, var.session_id))
 
-	if name ~= "ping" then
-		print(string.format("==> REQUEST %s(%d) data: %s",
-			name, var.session_id, cjsonutil.serialise_value(args)))
+	local ok, msg, sz = pcall(var.request, name, args, var.session_id)
+	if not ok then
+		print(string.format("    msg encode failed err: %s", tostring(msg)))
+		return
 	end
+	socket.write(msg, sz)
+
 	return var.session_id
 end
 

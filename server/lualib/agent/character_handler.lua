@@ -47,20 +47,20 @@ local function check_character (account_id, character_id)
 end
 
 local function create (name, race, class)
-	if not name then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_NAME, } end
-	if not race then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_RACE, } end
-	if not class then return { error_code = errcode.CHARACTER_INVLID_CHARACTER_CLASS, } end
+	if not name then return errcode.CHARACTER_INVLID_CHARACTER_NAME end
+	if not race then return errcode.CHARACTER_INVLID_CHARACTER_RACE end
+	if not class then return errcode.CHARACTER_INVLID_CHARACTER_CLASS end
 	if #name <= 2 or #name > 24 then
 		log (string.format("invalid character name: %s", name))
-		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_NAME, }
+		return errcode.CHARACTER_INVLID_CHARACTER_NAME
 	end
 	if not gdd.race[race] then
 		log (string.format("invalid character race: %s", race))
-		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_RACE, }
+		return errcode.CHARACTER_INVLID_CHARACTER_RACE
 	end
 	if not gdd.class[class] then
 		log (string.format("invalid character class: %s", class))
-		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_CLASS, }
+		return errcode.CHARACTER_INVLID_CHARACTER_CLASS
 	end
 
 	local race_info = gdd.race[race]

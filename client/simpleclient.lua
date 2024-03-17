@@ -17,7 +17,7 @@ package.cpath = table.concat({
 }, ";")
 
 local crypt = require "client.crypt"
-local protoloader = require "protoloader"
+local protoloader = require "proto/sproto_mgr"
 local message = require "simplemessage"
 local cjsonutil = require "cjson.util"
 
@@ -45,7 +45,7 @@ function event:acknowledgment (args)
 	user.acknumber = args.acknumber
 	user.clientkey = crypt.randomkey()
 	message.request ("handshake", {
-							client_pub = crypt.dhexchange(user.clientkey),
+						 client_pub = crypt.dhexchange(user.clientkey),
 	})
 end
 
@@ -85,10 +85,14 @@ function event:auth(_, resp, ret)
 	user.login_session_expire = resp.expire
 	user.token = resp.token
 
+	-- 跳转到游戏服务器
+	message.request ("switchgame")
+
 	message.register(protoloader.GAME)
 	self.authed = true
 
-	message.request ("character_list")
+	-- 请求角色列表
+	message.request ("character_list", {})
 end
 
 function event:character_list (_, resp, ret)

@@ -18,12 +18,17 @@ challenge 2 {
 
 auth 3 {
     request {
-        username 0 : string           # 用户名
-        password 1 : string           # 密码
+        username 0 : string             # 用户名
+        password 1 : string             # 密码
     }
     response {
-        login_session 1 : integer      # 登陆session号
-        expire 2 : integer             # 过期时间(妙)
-        token 3 : string               # token,后面可以用login_session + token 登陆
+        login_session 1 : integer       # 登陆session号
+        expire 2 : integer              # 过期时间(妙)
+        token 3 : string                # token,后面可以用login_session + token 登陆
+    }
+}
+
+switchgame 4 {
+    request {
     }
 }
