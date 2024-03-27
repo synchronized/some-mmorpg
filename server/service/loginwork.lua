@@ -34,7 +34,7 @@ local kick = function(user)
 	end
 end
 
-function cli:handshake(args)
+function cli:req_handshake(args)
 	if self.handle_type ~= "handshake" then
 		kick(self)
 		return errcode.LOGIN_INVALID_HANDLE_TYPE --请求协议有误
@@ -58,12 +58,13 @@ function cli:handshake(args)
 	self.secret = crypt.dhsecret(self.clientkey, self.serverkey)
 
 	self.handle_type = "challenge"
-	return nil, {
-		secret = crypt.dhexchange(self.serverkey),
-				}
+	client.sendmsg(self, 'res_handshake', {
+					   secret = crypt.dhexchange(self.serverkey),
+	})
+	return true
 end
 
-function cli:challenge(args)
+function cli:req_challenge(args)
 	if self.handle_type ~= "challenge" then
 		kick(self)
 		return errcode.LOGIN_INVALID_HANDLE_TYPE --请求协议有误
@@ -83,10 +84,10 @@ function cli:challenge(args)
 		return errcode.LOGIN_INVALID_HMAC --hmac 有误
 	end
 	self.handle_type = "auth"
-	return nil, nil
+	return true
 end
 
-function cli:auth(args)
+function cli:req_auth(args)
 	if self.handle_type ~= "auth" then
 		kick(self)
 		return errcode.LOGIN_INVALID_HANDLE_TYPE --请求协议有误
@@ -134,11 +135,12 @@ function cli:auth(args)
 
 	self.exit = true
 
-	return nil, {
-		login_session = login_session,
-		expire = session_expire_time_in_second,
-		token = token,
-	}
+	client.sendmsg(self, 'res_auth', {
+					   login_session = login_session,
+					   expire = session_expire_time_in_second,
+					   token = token,
+	})
+	return true
 end
 
 local loginwork = {}
@@ -170,7 +172,7 @@ local function auth (fd, addr)
 	end)
 
 	-- acknowledgment
-	client.push(user, "acknowledgment", {
+	client.sendmsg(user, "res_acknowledgment", {
 					acknumber = user.acknumber,
 	})
 

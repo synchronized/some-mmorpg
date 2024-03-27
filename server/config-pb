@@ -1,0 +1,23 @@
+skynet_root = "3rd/skynet"
+server_root = "server"
+common_root = "common"
+pb_root = "3rd/pb"
+
+thread = 8
+-- logger = "$SERVER_NAME"
+harbor = 0
+start = "main"	-- main script
+bootstrap = "snlua bootstrap"	-- The service for bootstrap
+
+-- table.concat({}, ";")
+lua_path = server_root.."/lualib/?.lua;"..common_root.."/lualib/?.lua;"..skynet_root.."/lualib/?.lua;"..pb_root.."/?.lua"
+lua_cpath = server_root.."/luaclib/?.so;"..common_root.."/luaclib/?.so;"..skynet_root.."/luaclib/?.so"
+cpath = server_root.."/cservice/?.so;"..skynet_root.."/cservice/?.so"
+luaservice = server_root.."/service/?.lua;"..skynet_root.."/service/?.lua"
+
+lualoader = skynet_root.."/lualib/loader.lua"
+snax = skynet_root.."?.lua;"
+
+if "$OS" == "Linux" then
+--	daemon = root .. "$SERVER_NAME" .. ".pid"
+end

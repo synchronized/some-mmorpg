@@ -7,6 +7,7 @@ local dbpacker = require "db.packer"
 local cjsonutil = require "cjson.util"
 local uuid = require "uuid"
 local errcode = require "errcode.errcode"
+local client = require "client"
 
 local handler = require "agent.handler"
 
@@ -134,7 +135,7 @@ local function on_enter_world (character)
 	end
 end
 
-function REQUEST:character_list ()
+function REQUEST:req_character_list ()
 	local char_list = load_list (user.account_id)
 	log ("<character_list> account_id: "..tostring(user.account_id)..", char_list: "..cjsonutil.serialise_value(char_list, "  "))
 	local character = {}
@@ -146,15 +147,16 @@ function REQUEST:character_list ()
 	end
 
 	log ("    character-list: "..cjsonutil.serialise_value(character, "  "))
-	return nil, { character = character }
+	client.sendmsg(self, "res_character_list", { character = character })
+	return true
 end
 
 function REQUEST:character_create (args)
 	if not args then
-		return { error_code = errcode.COMMON_INVALID_REQUEST_PARMS }
+		return errcode.COMMON_INVALID_REQUEST_PARMS
 	end
 	if not args.character then
-		return { error_code = errcode.COMMON_INVALID_REQUEST_PARMS }
+		return errcode.COMMON_INVALID_REQUEST_PARMS
 	end
 	local char_req = args.character
 
@@ -169,14 +171,14 @@ function REQUEST:character_create (args)
 	local character_id = skynet.call(database, "lua", "character", "reserve", uuid.gen(), char_name)
 	if not character_id then
 		log ("    character_name: %s already exist", char_name)
-		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_ID }
+		return errcode.CHARACTER_INVLID_CHARACTER_ID
 	end
 
 	character.id = character_id
 	local json = dbpacker.pack (character)
 	if not skynet.call(database, "lua", "character", "save", character_id, json) then
 		log ("    character_id: %d save failed data: %s", character_id, json)
-		return { error_code = errcode.CHARACTER_SAVE_DATA_FAILED }
+		return errcode.CHARACTER_SAVE_DATA_FAILED
 	end
 
 	local list = load_list (user.account_id)
@@ -185,24 +187,25 @@ function REQUEST:character_create (args)
 
 	if not skynet.call(database, "lua", "character", "savelist", user.account_id, json) then
 		log ("    account_id: %d save failed char_list: %s", user.account_id, json)
-		return { error_code = errcode.CHARACTER_SAVE_DATA_FAILED }
+		return errcode.CHARACTER_SAVE_DATA_FAILED
 	end
 
-	return nil, { character = character }
+	client.sendmsg(self, "res_character_create", { character = character })
+	return true
 end
 
-function REQUEST:character_pick (args)
+function REQUEST:req_character_pick (args)
 	if not args then
-		return { error_code = errcode.COMMON_INVALID_REQUEST_PARMS }
+		return errcode.COMMON_INVALID_REQUEST_PARMS
 	end
 	if not args.id then
 		log ("invalid character_id: %d", tonumber(args.id))
-		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_ID }
+		return errcode.CHARACTER_INVLID_CHARACTER_ID
 	end
 	local character_id = args.id
 	if not check_character (user.account_id, character_id) then
 		log ("invalid character_id: %d", character_id)
-		return { error_code = errcode.CHARACTER_INVLID_CHARACTER_ID }
+		return errcode.CHARACTER_INVLID_CHARACTER_ID
 	end
 
 	log ("<character_pick> args: "..cjsonutil.serialise_value(args, "  "))
@@ -211,7 +214,8 @@ function REQUEST:character_pick (args)
  		log ("    current character_id: %d", user.character.id)
 		-- 已经选择过角色, 如果是当前角色直接返回
 		if user.character.id == character_id then
-			return nil, { character = user.character }
+			client.sendmsg(self, "res_character_pick", { character = user.character })
+			return true
 		end
 
 		-- 如果不是当前角色先将之前的角色离开地图
@@ -228,7 +232,7 @@ function REQUEST:character_pick (args)
 	local c = skynet.call(database, "lua", "character", "load", character_id)
 	if not c then
 		log ("character_id: %d load failed", character_id)
-		return { error_code = errcode.CHARACTER_LOAD_DATA_FAILED }
+		return errcode.CHARACTER_LOAD_DATA_FAILED
 	end
 	local character = dbpacker.unpack (c)
 	user.character = character
@@ -238,7 +242,8 @@ function REQUEST:character_pick (args)
 	local pos =  user.character.movement.pos
 	skynet.call (world, "lua", "character_enter", character_id, map, pos)
 
-	return nil, { character = character }
+	client.sendmsg(self, "res_character_pick", { character = character })
+	return true
 end
 
 function handler.save (character)

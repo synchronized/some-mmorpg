@@ -20,6 +20,7 @@ local crypt = require "client.crypt"
 local protoloader = require "proto/sproto_mgr"
 local message = require "simplemessage"
 local cjsonutil = require "cjson.util"
+local errcode = require "errcode.errcode"
 
 protoloader.init()
 
@@ -41,43 +42,42 @@ local event = {
 function event:ping()
 end
 
-function event:acknowledgment (args)
+function event:res_acknowledgment (args)
 	user.acknumber = args.acknumber
 	user.clientkey = crypt.randomkey()
-	message.request ("handshake", {
+	message.sendmsg ("req_handshake", {
 						 client_pub = crypt.dhexchange(user.clientkey),
 	})
 end
 
+local cb_handshake = function(req, opflag, error_code)
+	if not opflag then
+		print(string.format("<error> RESPONSE.handshake errcode:%d(%s)", error_code, errcode.error_msg(error_code)))
+		return
+	end
+	message.sendmsg("req_auth", {
+						username = crypt.desencode (user.secret, user.username),
+						password = crypt.desencode (user.secret, user.password),
+	})
+end
 
-function event:handshake(_, resp, ret)
-	if ret then
-		print(string.format("<error> RESPONSE.handshake ret:", cjsonutil.serialise_value(ret)))
+function event:res_handshake(resp)
+	if not resp then
+		print(string.format("<error> RESPONSE.handshake resp is nil:"))
 		return
 	end
 	user.secret = crypt.dhsecret(resp.secret, user.clientkey)
 	print("sceret is ", crypt.hexencode(user.secret))
 
 	local hmac = crypt.hmac64(user.acknumber, user.secret)
-	message.request("challenge", {
+	message.sendmsg("req_challenge", {
 						hmac = hmac,
-	})
+									 }, cb_handshake)
 end
 
-function event:challenge(_, _, ret)
-	if ret then
-		print(string.format("<error> RESPONSE.challenge ret:", cjsonutil.serialise_value(ret)))
-		return
-	end
-	message.request("auth", {
-						username = crypt.desencode (user.secret, user.username),
-						password = crypt.desencode (user.secret, user.password),
-	})
-end
-
-function event:auth(_, resp, ret)
-	if ret then
-		print(string.format("<error> RESPONSE.auth ret:", cjsonutil.serialise_value(ret)))
+function event:res_auth(resp)
+	if not resp then
+		print(string.format("<error> RESPONSE.auth resp is nil:"))
 		return
 	end
 
@@ -86,25 +86,22 @@ function event:auth(_, resp, ret)
 	user.token = resp.token
 
 	-- 跳转到游戏服务器
-	message.request ("switchgame")
+	message.sendmsg ("req_switchgame", nil)
 
-	message.register(protoloader.GAME)
+	--message.register(protoloader.GAME)
 	self.authed = true
 
 	-- 请求角色列表
-	message.request ("character_list", {})
+	message.sendmsg ("req_character_list", nil)
 end
 
-function event:character_list (_, resp, ret)
-	if ret then
-		print(string.format("<error> RESPONSE.character_list ret:", cjsonutil.serialise_value(ret)))
-		return
-	end
+function event:res_character_list (resp)
+	resp = resp or {}
 
 	local character_id = next(resp.character)
 	print(string.format("choose characterId: %s", tostring(character_id)))
 	if not character_id then
-		message.request("character_create", {
+		message.sendmsg("req_character_create", {
 			character = {
 				name = string.format("%s-%s", user.username, "hello"),
 				race = "human",
@@ -112,19 +109,19 @@ function event:character_list (_, resp, ret)
 			},
 		})
 	else
-		message.request("character_pick", {
-			id = character_id,
+		message.sendmsg("req_character_pick", {
+							id = character_id,
 		})
 	end
 end
 
-function event:character_create (_, _, ret)
-	if ret then
-		print(string.format("<error> RESPONSE.character_create ret:", cjsonutil.serialise_value(ret)))
-		return
-	end
+function event:res_character_create ()
+	message.sendmsg ("req_character_list")
+end
 
-	message.request ("character_list")
+function event:res_character_pick (resp)
+	print(string.format("<== RESPONSE res_character_pick character: %s",
+						cjsonutil.serialise_value(resp)))
 end
 
 local cli = {
@@ -136,7 +133,7 @@ function cli:update()
 		local timenow = os.time()
 		if timenow - self.pingtime > 5 then
 			self.pingtime = timenow
-			message.request("ping")
+			message.sendmsg("ping")
 		end
 	end
 end

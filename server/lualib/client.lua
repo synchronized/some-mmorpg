@@ -1,9 +1,12 @@
 local skynet = require "skynet"
-local errcode= require "errcode.errcode"
+local crypt = require "skynet.crypt"
 
+local errcode= require "errcode.errcode"
 local proxy = require "socket_proxy"
-local protoloader = require "proto/sproto_mgr"
+--local protoloader = require "proto/sproto_mgr"
+local protobuf = require "proto/pb_mgr"
 local log = require "log"
+local cjsonutil = require "cjson.util"
 
 local traceback = debug.traceback
 
@@ -42,10 +45,9 @@ function client.write( fd, luastring)
 end
 
 local emptytable = {}
-function client.dispatch( c )
+function client.dispatch_message( c )
 	local fd = c.fd
 	proxy.subscribe(fd)
-	local co = coroutine.running()
 	while true do
 		local msg, sz = proxy.read(fd)
 		local type, session_id, args, fnresponse = host:dispatch(msg, sz)
@@ -103,31 +105,110 @@ function client.dispatch( c )
 	end
 end
 
+function client.dispatch( c )
+	local fd = c.fd
+	proxy.subscribe(fd)
+	while true do
+		local msg, sz = proxy.read(fd)
+		if c.exit then
+			return c
+		end
+		local bytemsg = skynet.tostring(msg, sz)
+		local bytes_header, n = string.unpack(">s2", bytemsg)
+		bytemsg = string.sub(bytemsg, n)
+		local bytes_body, _ = string.unpack(">s2", bytemsg)
+
+		local msg_header = assert(protobuf.decode('proto.req_msgheader', bytes_header))
+		local msgname = msg_header.msg_name
+		local client_session_id = msg_header.session
+		local args = nil
+		if #bytes_body > 0 then
+			args = assert(protobuf.decode('proto.'..msgname, bytes_body))
+		end
+
+		local f = c.REQUEST and c.REQUEST[msgname] or handler[msgname] -- session_id is request type
+		if not f then
+			-- unsupported command, disconnected
+			error(string.format("request %s have no handler", msgname))
+		else
+			-- f may block , so fork and run
+			skynet.fork(function()
+				local ok, err, error_code = xpcall(f, traceback, c, args)
+				--log("=============msgname: %s, ok:%s, err:%s, error_code:%s", msgname, tostring(ok), tostring(err), tostring(error_code))
+				local msgresult = nil
+				if not ok then
+					log.printf("<error> response error = %s", err)
+					if client_session_id > 0 then
+						msgresult = {
+							session = client_session_id,
+							result = false,
+							error_code = errcode.COMMON_SERVER_ERROR,
+						}
+					end
+				elseif error_code ~= nil then
+					if client_session_id > 0 then
+						msgresult = {
+							session = client_session_id,
+							result = err,
+							error_code = error_code,
+						}
+					end
+				elseif type(err) == "number" then
+					if client_session_id > 0 then
+						msgresult = {
+							session = client_session_id,
+							result = err == errcode.SUCCESS,
+							error_code = err,
+						}
+					end
+				elseif type(err) == "boolean" then
+					if client_session_id > 0 then
+						msgresult = {
+							session = client_session_id,
+							result = err,
+							error_code = errcode.SUCCESS,
+						}
+					end
+				else
+					--error()
+				end
+				if msgresult ~= nil then
+					client.sendmsg(c, 'res_msgresult', msgresult)
+				end
+			end)
+		end
+	end
+end
+
 function client.close(fd)
 	proxy.close(fd)
 end
 
--- 向客户端推送消息
-function client.push(c, t, data)
+function client.sendmsg(c, t, data)
 	proxy.subscribe(c.fd)
-	proxy.write(c.fd, sender(t, data))
-end
+	local bytes_header = assert(protobuf.encode("proto.res_msgheader", {
+											  msg_name = t,
+	}))
+	--log("=============sendmsg: %s, data:%s", t, cjsonutil.serialise_value(data))
+	local bytes_body = ""
+	if data then
+		bytes_body = assert(protobuf.encode('proto.'..t, data))
+		--log("=============sendmsg: %s, bytes_body:%s|", t, crypt.base64encode(bytes_body))
+	end
 
--- 向客户端发送请求消息
-function client.request(c, t, data)
-	var.session_id = var.session_id + 1
-	proxy.write(c.fd, sender(t, data, var.session_id))
-	var.session[var.session_id] = {
-		name = t,
-		req = data,
-	}
+
+	local msg = string.pack(">s2>s2", bytes_header, bytes_body)
+
+	--log("=============sendmsg: %s, hexdata:%s", t, crypt.base64encode(msg))
+
+	proxy.write(c.fd, msg)
 end
 
 function client.init(name)
 	return function ()
-		local protod = skynet.uniqueservice "protod"
-		local protoindex = assert(skynet.call(protod, "lua", "loadindex", name))
-		host, sender = protoloader.loadbyserver (protoindex)
+		--local protod = skynet.uniqueservice "protod"
+		--local protoindex = assert(skynet.call(protod, "lua", "loadindex", name))
+		--host, sender = protoloader.loadbyserver (protoindex)
 	end
 end
 
