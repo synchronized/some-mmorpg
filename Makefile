@@ -48,6 +48,7 @@ CLIENT_LUA_CLIB = lsocket
 all : \
   $(foreach v, $(BIN_OBJECT), $(BIN_PATH)/$(v)) \
   $(foreach v, $(COMMON_LUA_CLIB), $(COMMON_LUA_CLIB_PATH)/$(v).so) \
+  $(foreach v, $(COMMON_LUA_LIB),  $(COMMON_LUA_LIB_PATH)/$(v).lua) \
   $(foreach v, $(SERVER_LUA_CLIB), $(SERVER_LUA_CLIB_PATH)/$(v).so) \
   $(foreach v, $(SERVER_CSERVICE), $(SERVER_CSERVICE_PATH)/$(v).so) \
   $(foreach v, $(CLIENT_LUA_CLIB), $(CLIENT_LUA_CLIB_PATH)/$(v).so)
