@@ -11,6 +11,8 @@ CJSON_INC ?= ../skynet/3rd/lua
 LSOCKET_ROOT ?= $(THIRD_LIB_ROOT)/lsocket
 LSOCKET_INC ?= ../skynet/3rd/lua
 
+PB_ROOT ?= $(THIRD_LIB_ROOT)/pb
+
 BIN_PATH ?= bin
 
 COMMON_ROOT ?= common
@@ -34,7 +36,7 @@ LUA_LIB ?= $(LUA_STATICLIB)
 BIN_OBJECT =
 
 # common
-COMMON_LUA_CLIB = cjson
+COMMON_LUA_CLIB = cjson pb
 
 # server
 SERVER_LUA_CLIB = uuid
@@ -67,6 +69,9 @@ $(CLIENT_LUA_CLIB_PATH) :
 
 $(COMMON_LUA_CLIB_PATH)/cjson.so : | $(COMMON_LUA_CLIB_PATH)
 	cd $(CJSON_ROOT) && $(MAKE) LUA_INCLUDE_DIR=$(CJSON_INC) CC=$(CC) CJSON_LDFLAGS="$(SHARED)" && cd - && cp $(CJSON_ROOT)/cjson.so $@
+
+$(COMMON_LUA_CLIB_PATH)/pb.so : | $(COMMON_LUA_CLIB_PATH)
+	$(CC) $(CUSTOM_CFLAGS) $(SHARED) $(PB_ROOT)/pb.c -o $@
 
 $(CLIENT_LUA_CLIB_PATH)/lsocket.so : | $(CLIENT_LUA_CLIB_PATH)
 	cd $(LSOCKET_ROOT) && $(MAKE) LUA_INCLUDE=$(LSOCKET_INC) && cd - && cp $(LSOCKET_ROOT)/lsocket.so $@

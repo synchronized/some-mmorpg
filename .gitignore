@@ -34,3 +34,4 @@
 bin/
 var/
 client/anonymous
+proto/protobuf/pb/*.pb

@@ -12,3 +12,6 @@
 [submodule "3rd/lsocket"]
 	path = 3rd/lsocket
 	url = https://github.com/cloudwu/lsocket.git
+[submodule "3rd/pb"]
+	path = 3rd/pb
+	url = https://github.com/starwing/lua-protobuf.git
