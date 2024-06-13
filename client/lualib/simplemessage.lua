@@ -51,15 +51,11 @@ function message.sendmsg(name, args, callback)
 	var.session_id = var.session_id + 1
 	var.session[var.session_id] = { name = name, req = args, callback = callback}
 
-	local bytes_header = assert(protobuf.encode("proto.req_msgheader", {
-		msg_name = name,
-		session = var.session_id,
-	}))
 	local bytes_body = ""
 	if args then
 		bytes_body = assert(protobuf.encode('proto.'..name, args))
 	end
-	local msg = string.pack(">s2", bytes_header)..string.pack(">s2", bytes_body)
+	local msg = string.pack(">s2>I4>s2", name, var.session_id, bytes_body)
 
 	socket.write(msg)
 
@@ -73,11 +69,8 @@ function message.dispatch_pb(ti)
 	end
 	local bytemsg = msg
 
-	local bytes_header, bytes_body = string.unpack(">s2>s2", bytemsg)
+	local msgname, bytes_body = string.unpack(">s2>s2", bytemsg)
 
-	local msg_header = assert(protobuf.decode('proto.res_msgheader', bytes_header))
-
-	local msgname = msg_header.msg_name
 	local resp = nil
 	if #bytes_body > 0 then
 		resp = assert(protobuf.decode('proto.'..msgname, bytes_body))

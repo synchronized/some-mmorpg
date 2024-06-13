@@ -2,16 +2,6 @@ syntax = "proto3";
 
 package proto;
 
-//请求头信息(每次请求必须在消息前携带这个)
-message req_msgheader {
-    string msg_name = 1;  // 消息名称
-	int32 session = 2;   // sessionid
-}
-
-message res_msgheader {
-    string msg_name = 1;  // 消息名称
-}
-
 //响应请求结果(每次请求服务器响应这个消息)
 message res_msgresult {
 	int32 session = 1;   // sessionid

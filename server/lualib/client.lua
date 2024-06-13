@@ -114,13 +114,10 @@ function client.dispatch( c )
 			return c
 		end
 		local bytemsg = skynet.tostring(msg, sz)
-		local bytes_header, n = string.unpack(">s2", bytemsg)
+		local msgname, client_session_id, n = string.unpack(">s2>I4", bytemsg)
 		bytemsg = string.sub(bytemsg, n)
 		local bytes_body, _ = string.unpack(">s2", bytemsg)
 
-		local msg_header = assert(protobuf.decode('proto.req_msgheader', bytes_header))
-		local msgname = msg_header.msg_name
-		local client_session_id = msg_header.session
 		local args = nil
 		if #bytes_body > 0 then
 			args = assert(protobuf.decode('proto.'..msgname, bytes_body))
@@ -186,9 +183,6 @@ end
 
 function client.sendmsg(c, t, data)
 	proxy.subscribe(c.fd)
-	local bytes_header = assert(protobuf.encode("proto.res_msgheader", {
-											  msg_name = t,
-	}))
 	--log("=============sendmsg: %s, data:%s", t, cjsonutil.serialise_value(data))
 	local bytes_body = ""
 	if data then
@@ -197,7 +191,7 @@ function client.sendmsg(c, t, data)
 	end
 
 
-	local msg = string.pack(">s2>s2", bytes_header, bytes_body)
+	local msg = string.pack(">s2>s2", t, bytes_body)
 
 	--log("=============sendmsg: %s, hexdata:%s", t, crypt.base64encode(msg))
 
