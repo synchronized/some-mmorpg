@@ -76,6 +76,10 @@ local function new_user()
 	end
 end
 
+function agent.init (conf)
+	client.set_config({ islogmsg = conf.islogmsg})
+end
+
 function agent.assign (fd, account_id)
 	if user.fd then
 		error(string.format(

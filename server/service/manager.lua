@@ -3,9 +3,7 @@ local skynet = require "skynet"
 local service = require "service"
 local log = require "log"
 
-local cjsonutil = require "cjson.util"
-
-local traceback = debug.traceback
+local conf_agent = require "config.agent"
 
 local manager = {}
 local users = {}
@@ -17,10 +15,11 @@ local function new_agent()
 	local agent
 	if #agent_pool == 0 then
 		agent = skynet.newservice ("agent", skynet.self())
-		log.printf ("pool is empty, new agent(%d) created", agent)
+		skynet.call(agent, "lua", "init", conf_agent)
+		log ("pool is empty, new agent(%d) created", agent)
 	else
 		agent = table.remove (agent_pool, 1)
-		log.printf ("agent(%d) assigned, %d remain in pool", agent, #agent_pool)
+		log ("agent(%d) assigned, %d remain in pool", agent, #agent_pool)
 	end
 	return agent
 end
@@ -35,7 +34,9 @@ function manager.open(conf)
 	local n = tonumber(conf.agent_pool or 8)
 	log ("manager.open agent pool size: %d", n)
 	for _ = 1, n do
-		table.insert (agent_pool, skynet.newservice ("agent", selfaddr))
+		local agent = skynet.newservice ("agent", selfaddr)
+		skynet.call(agent, "lua", "init", conf_agent)
+		table.insert (agent_pool, agent)
 	end
 end
 
