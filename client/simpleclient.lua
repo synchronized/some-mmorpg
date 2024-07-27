@@ -43,10 +43,10 @@ function event:ping()
 end
 
 function event:res_acknowledgment (args)
-	user.acknumber = args.acknumber
+	user.acknumber = crypt.base64decode(args.acknumber)
 	user.clientkey = crypt.randomkey()
 	message.sendmsg ("req_handshake", {
-						 client_pub = crypt.dhexchange(user.clientkey),
+		client_pub = crypt.base64encode(crypt.dhexchange(user.clientkey)),
 	})
 end
 
@@ -56,8 +56,8 @@ local cb_handshake = function(req, opflag, error_code)
 		return
 	end
 	message.sendmsg("req_auth", {
-						username = crypt.desencode (user.secret, user.username),
-						password = crypt.desencode (user.secret, user.password),
+		username = crypt.base64encode(crypt.desencode(user.secret, user.username)),
+		password = crypt.base64encode(crypt.desencode(user.secret, user.password)),
 	})
 end
 
@@ -66,13 +66,11 @@ function event:res_handshake(resp)
 		print(string.format("<error> RESPONSE.handshake resp is nil:"))
 		return
 	end
-	user.secret = crypt.dhsecret(resp.secret, user.clientkey)
+	user.secret = crypt.dhsecret(crypt.base64decode(resp.secret), user.clientkey)
 	print("sceret is ", crypt.hexencode(user.secret))
 
-	local hmac = crypt.hmac64(user.acknumber, user.secret)
-	message.sendmsg("req_challenge", {
-						hmac = hmac,
-									 }, cb_handshake)
+	local hmac = crypt.base64encode(crypt.hmac64(user.acknumber, user.secret))
+	message.sendmsg("req_challenge", { hmac = hmac }, cb_handshake)
 end
 
 function event:res_auth(resp)
@@ -83,7 +81,7 @@ function event:res_auth(resp)
 
 	user.login_session = resp.login_session
 	user.login_session_expire = resp.expire
-	user.token = resp.token
+	user.token = crypt.base64decode(resp.token)
 
 	-- 跳转到游戏服务器
 	message.sendmsg ("req_switchgame", nil)

@@ -14,6 +14,7 @@ local client = {}
 local host
 local sender
 local handler = {}
+local conf_client = {}
 
 local var = {
 	session_id = 0 ,
@@ -114,13 +115,24 @@ function client.dispatch( c )
 			return c
 		end
 		local bytemsg = skynet.tostring(msg, sz)
-		local msgname, client_session_id, n = string.unpack(">s2>I4", bytemsg)
+		if conf_client.islogmsg then
+			log("=============receivemsg bytemsg:%s|", crypt.base64encode(bytemsg))
+		end
+		--NOTE:下面分开获取方便知道是哪一步出错了
+		local msgname, client_session_id, bytes_body, n
+		msgname, n = string.unpack(">s2", bytemsg)
 		bytemsg = string.sub(bytemsg, n)
-		local bytes_body, _ = string.unpack(">s2", bytemsg)
+		client_session_id, n = string.unpack(">I4", bytemsg)
+		bytemsg = string.sub(bytemsg, n)
+		bytes_body = string.unpack(">s2", bytemsg)
 
 		local args = nil
 		if #bytes_body > 0 then
 			args = assert(protobuf.decode('proto.'..msgname, bytes_body))
+		end
+		if conf_client.islogmsg then
+			log("=============receivemsg msgname:%s, bytes_body:%s|", msgname, crypt.base64encode(bytes_body))
+			log("=============receivemsg msgname:%s, data:%s", msgname, cjsonutil.serialise_value(args))
 		end
 
 		local f = c.REQUEST and c.REQUEST[msgname] or handler[msgname] -- session_id is request type
@@ -130,7 +142,7 @@ function client.dispatch( c )
 		else
 			-- f may block , so fork and run
 			skynet.fork(function()
-				local ok, err, error_code = xpcall(f, traceback, c, args)
+				local ok, err, error_code = xpcall(f, traceback, c, args, client_session_id)
 				--log("=============msgname: %s, ok:%s, err:%s, error_code:%s", msgname, tostring(ok), tostring(err), tostring(error_code))
 				local msgresult = nil
 				if not ok then
@@ -142,7 +154,7 @@ function client.dispatch( c )
 							error_code = errcode.COMMON_SERVER_ERROR,
 						}
 					end
-				elseif error_code ~= nil then
+				elseif type(error_code) == "number" and type(err) == "boolean" then
 					if client_session_id > 0 then
 						msgresult = {
 							session = client_session_id,
@@ -181,21 +193,27 @@ function client.close(fd)
 	proxy.close(fd)
 end
 
-function client.sendmsg(c, t, data)
+function client.sendmsg(c, msgname, data)
 	proxy.subscribe(c.fd)
-	--log("=============sendmsg: %s, data:%s", t, cjsonutil.serialise_value(data))
+	if conf_client.islogmsg then
+		log("=============sendmsg msgname:%s, data:%s", msgname, cjsonutil.serialise_value(data))
+	end
 	local bytes_body = ""
 	if data then
-		bytes_body = assert(protobuf.encode('proto.'..t, data))
-		--log("=============sendmsg: %s, bytes_body:%s|", t, crypt.base64encode(bytes_body))
+		bytes_body = assert(protobuf.encode('proto.'..msgname, data))
+	end
+	local bytemsg = string.pack(">s2>s2", msgname, bytes_body)
+
+	if conf_client.islogmsg then
+		log("=============sendmsg msgname:%s, bytes_body:%s|", msgname, crypt.base64encode(bytes_body))
+		log("=============sendmsg msgname:%s, bytemsg:%s|", msgname, crypt.base64encode(bytemsg))
 	end
 
+	proxy.write(c.fd, bytemsg)
+end
 
-	local msg = string.pack(">s2>s2", t, bytes_body)
-
-	--log("=============sendmsg: %s, hexdata:%s", t, crypt.base64encode(msg))
-
-	proxy.write(c.fd, msg)
+function client.set_config(config)
+	conf_client = config or {}
 end
 
 function client.init(name)

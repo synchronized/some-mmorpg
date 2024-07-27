@@ -18,6 +18,13 @@ local session_expire_time_in_second
 local connection = {}
 local saved_session = {}
 
+local handler_type = {
+	handshake = 1, --握手
+	challenge = 2, --质疑
+	auth      = 3, --验证
+	finish    = 4, --结束
+}
+
 local function close (fd)
 	if connection[fd] then
 		client.close (fd)
@@ -35,7 +42,7 @@ local kick = function(user)
 end
 
 function cli:req_handshake(args)
-	if self.handle_type ~= "handshake" then
+	if self.handle_type ~= handler_type.handshake then
 		kick(self)
 		return errcode.LOGIN_INVALID_HANDLE_TYPE --请求协议有误
 	end
@@ -48,7 +55,7 @@ function cli:req_handshake(args)
 		return errcode.LOGIN_INVALID_CLIENT_PUB --clientkey 有误
 	end
 
-	self.clientkey = args.client_pub
+	self.clientkey = crypt.base64decode(args.client_pub)
 	if #self.clientkey ~= 8 then
 		kick(self)
 		return errcode.LOGIN_INVALID_CLIENT_PUB --clientkey 有误
@@ -57,15 +64,15 @@ function cli:req_handshake(args)
 	self.serverkey = crypt.randomkey()
 	self.secret = crypt.dhsecret(self.clientkey, self.serverkey)
 
-	self.handle_type = "challenge"
+	self.handle_type = handler_type.challenge
 	client.sendmsg(self, 'res_handshake', {
-					   secret = crypt.dhexchange(self.serverkey),
+		secret = crypt.base64encode(crypt.dhexchange(self.serverkey)),
 	})
 	return true
 end
 
 function cli:req_challenge(args)
-	if self.handle_type ~= "challenge" then
+	if self.handle_type ~= handler_type.challenge then
 		kick(self)
 		return errcode.LOGIN_INVALID_HANDLE_TYPE --请求协议有误
 	end
@@ -78,17 +85,17 @@ function cli:req_challenge(args)
 		return errcode.LOGIN_INVALID_HMAC --hmac 有误
 	end
 
-	local hmac = crypt.hmac64(self.acknumber, self.secret)
+	local hmac = crypt.base64encode(crypt.hmac64(self.acknumber, self.secret))
 	if hmac ~= args.hmac then
 		kick(self)
 		return errcode.LOGIN_INVALID_HMAC --hmac 有误
 	end
-	self.handle_type = "auth"
+	self.handle_type = handler_type.auth
 	return true
 end
 
 function cli:req_auth(args)
-	if self.handle_type ~= "auth" then
+	if self.handle_type ~= handler_type.auth then
 		kick(self)
 		return errcode.LOGIN_INVALID_HANDLE_TYPE --请求协议有误
 	end
@@ -104,8 +111,8 @@ function cli:req_auth(args)
 		kick(self)
 		return errcode.LOGIN_INVALID_PASSWORD --密码有误
 	end
-	local username = crypt.desdecode(self.secret, args.username)
-	local password = crypt.desdecode(self.secret, args.password)
+	local username = crypt.desdecode(self.secret, crypt.base64decode(args.username))
+	local password = crypt.desdecode(self.secret, crypt.base64decode(args.password))
 
 	log ("<login> auth username: %s, password: %d", username, password)
 
@@ -136,10 +143,11 @@ function cli:req_auth(args)
 	self.exit = true
 
 	client.sendmsg(self, 'res_auth', {
-					   login_session = login_session,
-					   expire = session_expire_time_in_second,
-					   token = token,
+		login_session = login_session,
+		expire = session_expire_time_in_second,
+		token = crypt.base64encode(token),
 	})
+	self.handle_type = handler_type.finish
 	return true
 end
 
@@ -153,13 +161,15 @@ function loginwork.init (main, id, conf)
 	auth_timeout = conf.auth_timeout * 100
 	session_expire_time = conf.session_expire_time * 100
 	session_expire_time_in_second = conf.session_expire_time
+
+	client.set_config({ islogmsg = conf.islogmsg})
 end
 
 -- call by loginserver
 local function auth (fd, addr)
 	local user = {
 		fd = fd,
-		handle_type = "handshake",
+		handle_type = handler_type.handshake,
 		acknumber = crypt.randomkey(),
 	}
 
@@ -173,7 +183,7 @@ local function auth (fd, addr)
 
 	-- acknowledgment
 	client.sendmsg(user, "res_acknowledgment", {
-					acknumber = user.acknumber,
+		acknumber = crypt.base64encode(user.acknumber),
 	})
 
 	local ok, err = pcall(client.dispatch, user)
@@ -185,7 +195,7 @@ local function auth (fd, addr)
 	return user.account_id
 end
 
-function loginwork.auth(fd, addr)
+function loginwork.auth (fd, addr)
 	local account_id = auth(fd, addr)
 	if not account_id then
 		close(fd)

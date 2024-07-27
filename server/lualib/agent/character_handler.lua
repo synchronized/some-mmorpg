@@ -151,7 +151,7 @@ function REQUEST:req_character_list ()
 	return true
 end
 
-function REQUEST:character_create (args)
+function REQUEST:req_character_create (args)
 	if not args then
 		return errcode.COMMON_INVALID_REQUEST_PARMS
 	end
